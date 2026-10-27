@@ -1,0 +1,17 @@
+import { routeTests, page } from './helpers.js';
+routeTests([
+  ['alga_tickets_list', 'GET', '/tickets', { client_id: 'c1', is_open: true, limit: 5, fields: 'id,title', order: 'desc', sort: 'entered_at' }, { page: 1, limit: 5, client_id: 'c1', is_open: true, fields: 'id,title', order: 'desc', sort: 'entered_at' }],
+  ['alga_tickets_get', 'GET', '/tickets/t1', { id: 't1' }],
+  ['alga_tickets_search', 'GET', '/tickets/search', { query: 'router', board_id: 'b1' }, { ...page, query: 'router', board_id: 'b1' }],
+  ['alga_tickets_comments_list', 'GET', '/tickets/t1/comments', { id: 't1', is_internal: true }, { ...page, is_internal: true }],
+  ['alga_tickets_time_entries_list', 'GET', '/tickets/t1/time-entries', { id: 't1' }, page],
+  ['alga_tickets_assets_list', 'GET', '/tickets/t1/assets', { id: 't1' }, page],
+  ['alga_tickets_find_by_external_link', 'GET', '/tickets/by-external-link', { system: 'other', external_id: 'e1', external_parent_id: 'p1' }, { system: 'other', external_id: 'e1', external_parent_id: 'p1' }],
+  ['alga_tickets_create', 'POST', '/tickets', { title: 'Router', client_id: 'c1', board_id: 'b1', priority_id: 'p1', status_id: 's1' }, {}, { title: 'Router', client_id: 'c1', board_id: 'b1', priority_id: 'p1', status_id: 's1' }],
+  ['alga_tickets_update', 'PUT', '/tickets/t1', { id: 't1', summary: 'Fixed' }, {}, { summary: 'Fixed' }],
+  ['alga_tickets_update_status', 'PUT', '/tickets/t1/status', { id: 't1', status_id: 's1' }, {}, { status_id: 's1' }],
+  ['alga_tickets_update_assignment', 'PUT', '/tickets/t1/assignment', { id: 't1', assigned_to: 'u1' }, {}, { assigned_to: 'u1' }],
+  ['alga_tickets_comments_add', 'POST', '/tickets/t1/comments', { id: 't1', comment_text: 'Hi', is_internal: true }, {}, { comment_text: 'Hi', is_internal: true }],
+  ['alga_tickets_checklist_add', 'POST', '/tickets/t1/checklist', { id: 't1', item_name: 'Verify', is_required: true }, {}, { item_name: 'Verify', is_required: true }],
+  ['alga_tickets_delete', 'DELETE', '/tickets/t1', { id: 't1' }],
+]);
