@@ -1,5 +1,5 @@
 import { tool, id, str, text, bool } from './shared.js';
-const filters = { board_id: id, client_id: id, status_id: id, priority_id: id, assigned_to: id, is_open: bool, is_closed: bool, entered_from: str, entered_to: str, closed_from: str, closed_to: str, external_system: str, external_id: str, search: str };
+const filters = { board_id: id, client_id: id, status_id: id, priority_id: id, assigned_to: id, is_open: bool, is_closed: bool, entered_from: str, entered_to: str, closed_from: str, closed_to: str, external_system: str, external_id: id, search: str };
 const ticketFields = { title: str, summary: text, url: str, client_id: id, board_id: id, priority_id: id, status_id: id, severity_id: id, urgency_id: id, impact_id: id };
 export const tickets = [
   tool('alga_tickets_list', 'Return a page of tickets; filter by client, board, status, assignee, dates or external link.', 'GET', '/tickets', 'read', filters, [], true),
@@ -8,7 +8,7 @@ export const tickets = [
   tool('alga_tickets_comments_list', 'Return ticket comments; optionally filter internal notes.', 'GET', '/tickets/{id}/comments', 'read', { id, is_internal: bool }, ['id'], true),
   tool('alga_tickets_time_entries_list', 'Return a page of time entries linked to a ticket.', 'GET', '/tickets/{id}/time-entries', 'read', { id }, ['id'], true),
   tool('alga_tickets_assets_list', 'Return a page of assets linked to a ticket.', 'GET', '/tickets/{id}/assets', 'read', { id }, ['id'], true),
-  tool('alga_tickets_find_by_external_link', 'Return the ticket matching an external system and external ID.', 'GET', '/tickets/by-external-link', 'read', { system: str, external_id: str, external_parent_id: str }, ['system', 'external_id']),
+  tool('alga_tickets_find_by_external_link', 'Return the ticket matching an external system and external ID.', 'GET', '/tickets/by-external-link', 'read', { system: str, external_id: id, external_parent_id: id }, ['system', 'external_id']),
   tool('alga_tickets_create', 'Create and return a ticket with client, board, priority and status references.', 'POST', '/tickets', 'write', ticketFields, ['title', 'client_id', 'board_id', 'status_id', 'priority_id']),
   tool('alga_tickets_update', 'Update explicit ticket fields and return the ticket.', 'PUT', '/tickets/{id}', 'write', { id, ...ticketFields }, ['id']),
   tool('alga_tickets_update_status', 'Set a ticket status and return the updated ticket.', 'PUT', '/tickets/{id}/status', 'write', { id, status_id: id }, ['id', 'status_id']),

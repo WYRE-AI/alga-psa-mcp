@@ -128,7 +128,7 @@ export async function startHttpServer(): Promise<HttpServer> {
             status: 'ok',
             transport: 'http',
             mode: isGatewayMode ? 'gateway' : 'standalone',
-              timestamp: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
           })
         );
         return;
@@ -179,8 +179,8 @@ export async function startHttpServer(): Promise<HttpServer> {
           maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
         });
         res.on('close', () => {
-          transport.close();
-          server.close();
+          void transport.close();
+          void server.close();
         });
         await server.connect(transport);
         await transport.handleRequest(req, res);
