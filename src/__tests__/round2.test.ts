@@ -52,6 +52,29 @@ it.each([400, 401, 403, 404, 409, 422, 429, 500, 503, 302])(
     expect(apiFailure(status).message).toMatch(/Check|Ask|Get|Wait|Try/);
   },
 );
+it.each([502, 503, 504])('says the change is unconfirmed for HTTP %s on writes', (status) => {
+  for (const method of ['POST', 'PUT', 'DELETE']) {
+    expect(apiFailure(status, method).message).toBe(
+      `Alga did not confirm the change (HTTP ${status}). It may already have been saved; check in Alga before retrying.`,
+    );
+  }
+});
+it.each([502, 503, 504])('keeps the server-problem message for HTTP %s on reads', (status) => {
+  expect(apiFailure(status).message).toBe(
+    `Alga is having a server problem. Try again shortly; if it keeps failing, contact Alga support. (HTTP ${status}).`,
+  );
+  expect(apiFailure(status, 'GET').message).toBe(apiFailure(status).message);
+});
+it('keeps other write failure messages unchanged', () => {
+  expect(apiFailure(500, 'POST').message).toBe(apiFailure(500).message);
+  expect(apiFailure(404, 'DELETE').message).toBe(apiFailure(404).message);
+});
+it('reports an unconfirmed change when a POST gets HTTP 503', async () => {
+  const fetchMock = vi.fn(async () => new Response('', { status: 503 }));
+  await expect(
+    requestAlga(creds, 'POST', '/clients', {}, { a: 1 }, { fetch: fetchMock as never }),
+  ).rejects.toThrow('Alga did not confirm the change (HTTP 503).');
+});
 const mapping = (
   id: string,
   phase_id: string | null,

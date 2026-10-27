@@ -33,7 +33,7 @@ export class AlgaApiError extends Error {
 export class AlgaAuthError extends AlgaApiError {}
 export class AlgaForbiddenError extends AlgaApiError {}
 export class AlgaRateLimitError extends AlgaApiError {}
-export function apiFailure(status: number): AlgaApiError {
+export function apiFailure(status: number, method: string = 'GET'): AlgaApiError {
   const messages: Record<number, string> = {
     400: 'Alga rejected the request. Check the IDs and field values and try again',
     401: 'Alga rejected the API key. Check the API key in the connection settings, or create a new one in Alga under Profile → API Keys',
@@ -43,7 +43,10 @@ export function apiFailure(status: number): AlgaApiError {
     422: 'Alga rejected one or more field values. Check required fields and formats and try again',
     429: 'Alga is rate limiting requests. Wait a minute and try again.',
   };
-  const message = `${messages[status] || (status >= 300 && status < 400 ? 'Alga redirected the request, which is not allowed. Check that the instance URL is the exact https:// address you use to sign in, with no path' : status >= 500 ? 'Alga is having a server problem. Try again shortly; if it keeps failing, contact Alga support.' : 'Alga API request failed. Check the connection settings and try again.')} (HTTP ${status}).`;
+  const message =
+    method.toUpperCase() !== 'GET' && [502, 503, 504].includes(status)
+      ? `Alga did not confirm the change (HTTP ${status}). It may already have been saved; check in Alga before retrying.`
+      : `${messages[status] || (status >= 300 && status < 400 ? 'Alga redirected the request, which is not allowed. Check that the instance URL is the exact https:// address you use to sign in, with no path' : status >= 500 ? 'Alga is having a server problem. Try again shortly; if it keeps failing, contact Alga support.' : 'Alga API request failed. Check the connection settings and try again.')} (HTTP ${status}).`;
   const Kind =
     status === 401
       ? AlgaAuthError
@@ -121,7 +124,7 @@ export async function requestAlga(
       }
       if (!response.ok) {
         await response.body?.cancel();
-        throw apiFailure(response.status);
+        throw apiFailure(response.status, method);
       }
       if (response.status === 204) return { data: null };
       const text = await response.text();
