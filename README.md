@@ -193,11 +193,12 @@ schemas. Page and limit are bounded to 1–100; the client also clamps them.
 `nextCursor` as `cursor` with the same query/types/sort. It does not use page/order.
 Identifiers are strings, at most 128 characters, matching `^[A-Za-z0-9_\-:.]+$`;
 standalone `.` and `..` identifiers are refused. Tool inputs expose path identifiers
-as `id` except project task `taskId` and phase `phaseId`; task lists and status mapping lists use `project_id` and optional `phase_id`.
+as `id` except project phase lists, task lists, task creation and status mapping lists use
+`project_id`, phase selection uses `phase_id`, and task get/update/delete use `task_id`.
 
 Resource filters are optional. Filter behavior can vary by Alga version, so check results against your instance. Tests use mocked responses and don't contact a live Alga instance.
 
-Project task lists and task status mappings are not paginated. `alga_projects_tasks_list` takes `project_id` and optional `phase_id`. Task creation resolves an omitted status mapping from the phase’s effective scope, choosing the first non-closed mapping by display order, falling back to the first mapping.
+Project phase lists, task lists and task status mappings are not paginated. `alga_projects_tasks_list` takes `project_id` and optional `phase_id`. Task creation resolves an omitted status mapping from the phase’s effective scope, choosing the first non-closed mapping by display order, falling back to the first mapping.
 
 ### Read — 41 tools
 
@@ -223,7 +224,7 @@ Project task lists and task status mappings are not paginated. `alga_projects_ta
 | `alga_priorities_list`                    | List priorities, one page at a time. Use to browse or filter by priority name search.                                                                                                   |
 | `alga_projects_get`                       | Get one project by ID. Use after a list or search to see full details.                                                                                                                  |
 | `alga_projects_list`                      | List projects, one page at a time. Use to browse or filter by client, status or search.                                                                                                 |
-| `alga_projects_phases_list`               | List phases in a project, one page at a time.                                                                                                                                           |
+| `alga_projects_phases_list`               | List all phases in a project. This list is not paginated.                                                                                                                               |
 | `alga_projects_tasks_get`                 | Get one project task by ID. Use after a list or search to see full details.                                                                                                             |
 | `alga_projects_task_status_mappings_list` | List project task status mappings in display order. Pass phase_id to get its effective scope: phase mappings if present, otherwise project mappings. Use these IDs when creating tasks. |
 | `alga_projects_tasks_list`                | List all tasks in a project. Pass phase_id to list only one phase; get phase IDs from alga_projects_phases_list. These lists are not paginated.                                         |

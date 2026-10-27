@@ -113,9 +113,9 @@ export async function executeTool(
     const mappings = await requestAlga(
       creds,
       'GET',
-      `/projects/${encodeURIComponent(String(args.id))}/task-status-mappings`,
+      `/projects/${encodeURIComponent(String(args.project_id))}/task-status-mappings`,
     );
-    const scope = effectiveMappings(mappings, String(args.phaseId));
+    const scope = effectiveMappings(mappings, String(args.phase_id));
     const mapping = scope.find((m) => !m.is_closed) ?? scope[0];
     if (!mapping)
       throw new ToolArgumentError(

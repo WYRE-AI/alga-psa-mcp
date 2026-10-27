@@ -78,7 +78,7 @@ it.each([
       .mockResolvedValueOnce(json({ data: {} }) as never);
     await executeTool(
       tool('alga_projects_tasks_create'),
-      { id: 'project', phaseId: 'phase', task_name: 'Task' },
+      { project_id: 'project', phase_id: 'phase', task_name: 'Task' },
       creds,
     );
     expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain(
@@ -93,7 +93,7 @@ it('stops task creation when the effective scope is empty', async () => {
   await expect(
     executeTool(
       tool('alga_projects_tasks_create'),
-      { id: 'project', phaseId: 'phase', task_name: 'Task' },
+      { project_id: 'project', phase_id: 'phase', task_name: 'Task' },
       creds,
     ),
   ).rejects.toThrow('Configure task statuses in Alga');
@@ -134,4 +134,18 @@ it('requires a work item ID for ticket time entries', async () => {
     ),
   ).rejects.toThrow('Get the work item ID');
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it('lists phases without pagination and preserves the data-only response', async () => {
+  const phasesTool = tool('alga_projects_phases_list');
+  expect(phasesTool.paginated).toBe(false);
+  expect(Object.keys(phasesTool.inputSchema.properties)).toEqual(['project_id']);
+  expect(phasesTool.inputSchema.required).toEqual(['project_id']);
+  const response = { data: [{ phase_id: 'phase' }] };
+  vi.mocked(fetch).mockResolvedValueOnce(json(response) as never);
+  const result = await executeTool(phasesTool, { project_id: 'project' }, creds);
+  expect(String(vi.mocked(fetch).mock.calls[0][0])).toBe(
+    creds.instanceUrl + '/api/v1/projects/project/phases',
+  );
+  expect(JSON.parse(result)).toEqual(response);
 });
