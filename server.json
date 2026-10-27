@@ -35,6 +35,27 @@
           "description": "Optional. Leave blank unless Alga support asks for it. A wrong value makes every request fail.",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "ALGA_ENABLE_WRITES",
+          "description": "Turns on the 18 write tools (create and update). Off by default. Container-wide: applies to every connection the container serves.",
+          "isRequired": false,
+          "format": "string",
+          "default": "false"
+        },
+        {
+          "name": "ALGA_ENABLE_DESTRUCTIVE",
+          "description": "Turns on the 12 destructive tools (delete, merge, finalize, send, approve). Needs ALGA_ENABLE_WRITES=true too. Off by default.",
+          "isRequired": false,
+          "format": "string",
+          "default": "false"
+        },
+        {
+          "name": "READ_ONLY_MODE",
+          "description": "Exposes read tools only, even if writes are turned on. Off by default.",
+          "isRequired": false,
+          "format": "string",
+          "default": "false"
         }
       ]
     }

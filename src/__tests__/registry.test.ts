@@ -105,7 +105,7 @@ it('rejects unknown, disabled and read-only writes by name', async () => {
     );
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result)).toContain(
-      `${tool.name} is turned off because this container is in read-only mode (READ_ONLY_MODE=true).`,
+      `${tool.name} is turned off because this container is in read-only mode. An admin can turn it off by setting READ_ONLY_MODE=false.`,
     );
   }
   for (const tool of ALL_TOOLS.filter((t) => t.tier === 'destructive'))

@@ -14,7 +14,7 @@ export function toolEnabled(tool: Definition, env: NodeJS.ProcessEnv): boolean {
 }
 export function disabledReason(tool: Definition, env: NodeJS.ProcessEnv): string {
   if (readOnlyMode(env))
-    return `${tool.name} is turned off because this container is in read-only mode (READ_ONLY_MODE=true).`;
+    return `${tool.name} is turned off because this container is in read-only mode. An admin can turn it off by setting READ_ONLY_MODE=false.`;
   if (tool.tier === 'write')
     return `${tool.name} is turned off because creating and changing records in Alga is off in this container. An admin can turn it on with ALGA_ENABLE_WRITES=true.`;
   return `${tool.name} is turned off because destructive actions in Alga are off in this container. An admin can turn them on with ALGA_ENABLE_WRITES=true and ALGA_ENABLE_DESTRUCTIVE=true.`;

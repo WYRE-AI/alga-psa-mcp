@@ -17,9 +17,3 @@ export function wrapUntrusted(text: string): string {
   const nonce = newNonce();
   return `${UNTRUSTED_NOTICE}\n<untrusted-content nonce="${nonce}">\n${neutralize(text)}\n</untrusted-content nonce="${nonce}">`;
 }
-
-/** Compact inline envelope for any vendor error text that is ever forwarded. */
-export function wrapVendorDetail(detail: string): string {
-  const nonce = newNonce();
-  return `<untrusted-content nonce="${nonce}">${neutralize(detail)}</untrusted-content nonce="${nonce}">`;
-}

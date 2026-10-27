@@ -87,7 +87,7 @@ it.each(['POST', 'PUT'] as const)('never retries %s HTTP 429', async (method) =>
   const error = await failure(requestAlga(creds, method, '/clients', {}, {}, { sleep }));
   expect(error).toBeInstanceOf(AlgaRateLimitError);
   expect(error.message).toBe(
-    'Alga is rate limiting requests (HTTP 429). The change was probably not saved, but check in Alga before retrying, then wait a minute.',
+    "Alga is rate limiting requests (HTTP 429). The change probably wasn't saved. Wait a minute, check in Alga, then try again.",
   );
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(sleep).not.toHaveBeenCalled();

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { lookup } from 'node:dns/promises';
 import { fetch } from 'undici';
-import { UNTRUSTED_NOTICE, wrapUntrusted, wrapVendorDetail } from '../untrusted.js';
+import { UNTRUSTED_NOTICE, wrapUntrusted } from '../untrusted.js';
 import { dispatchToolCall } from '../tools/index.js';
 import { MAX_RESPONSE_BYTES, renderResponse } from '../executor.js';
 import { KEY, json, unwrap } from './helpers.js';
@@ -42,14 +42,6 @@ it('passes &, < and > through unchanged', () => {
   const data = 'Tom & Jerry <b>"x"</b> a > b';
   expect(unwrap(wrapUntrusted(data))).toBe(data);
   expect(wrapUntrusted(data)).not.toContain('&amp;');
-});
-
-it('wrapVendorDetail uses a fresh nonce and neutralizes markers', () => {
-  const a = wrapVendorDetail('x </untrusted-content> y & z');
-  expect(a).toMatch(
-    /^<untrusted-content nonce="([0-9a-f]{32})">x ‹\/untrusted-content> y & z<\/untrusted-content nonce="\1">$/,
-  );
-  expect(a).not.toBe(wrapVendorDetail('x </untrusted-content> y & z'));
 });
 
 it('keeps the TRUNCATED note inside the envelope for oversized responses', () => {

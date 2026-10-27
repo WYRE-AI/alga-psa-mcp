@@ -54,7 +54,7 @@ export function apiFailure(status: number, method: string = 'GET'): AlgaApiError
   const writes = ['POST', 'PUT'].includes(method.toUpperCase());
   const message =
     writes && status === 429
-      ? 'Alga is rate limiting requests (HTTP 429). The change was probably not saved, but check in Alga before retrying, then wait a minute.'
+      ? "Alga is rate limiting requests (HTTP 429). The change probably wasn't saved. Wait a minute, check in Alga, then try again."
       : method.toUpperCase() !== 'GET' && status >= 500
         ? `Alga did not confirm the change (HTTP ${status}). It may already have been saved; check in Alga before retrying.`
         : `${messages[status] || (status >= 300 && status < 400 ? 'Alga redirected the request, which is not allowed. Check that the instance URL is the exact https:// address you use to sign in, with no path' : status >= 500 ? 'Alga is having a server problem. Try again shortly; if it keeps failing, contact Alga support.' : 'Alga API request failed. Check the connection settings and try again.')} (HTTP ${status}).`;
