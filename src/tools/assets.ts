@@ -54,7 +54,7 @@ export const assets = [
   ),
   tool(
     'alga_assets_update',
-    'Update a asset and return it. Pass the asset ID and only the fields you want to change.',
+    'Update an asset and return it. Pass the asset ID and only the fields you want to change.',
     'PUT',
     '/assets/{id}',
     'write',

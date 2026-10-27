@@ -44,6 +44,7 @@ request to `/mcp`:
 Gateway mode **never falls back to environment credentials**, including the tenant
 ID. Missing required credential headers return HTTP 401 JSON `{error: ...}`;
 invalid or disallowed instance URLs return HTTP 400 JSON before MCP handling.
+A tenant ID, when supplied, must be a UUID. Empty tenant values are ignored.
 Credentials are isolated using AsyncLocalStorage. Each request gets its own MCP
 server and stateless transport; no credential-bearing sessions persist.
 
@@ -249,7 +250,7 @@ Project task lists and task status mappings are not paginated. `alga_projects_ta
 | Tool                             | Effect / returned result                                                                                                                                                                                                                            |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `alga_assets_create`             | Create and return an asset with a client, type, tag, name and status.                                                                                                                                                                               |
-| `alga_assets_update`             | Update a asset and return it. Pass the asset ID and only the fields you want to change.                                                                                                                                                             |
+| `alga_assets_update`             | Update an asset and return it. Pass the asset ID and only the fields you want to change.                                                                                                                                                            |
 | `alga_clients_create`            | Create and return a client with a name and billing cycle.                                                                                                                                                                                           |
 | `alga_clients_update`            | Update a client and return it. Pass the client ID and only the fields you want to change.                                                                                                                                                           |
 | `alga_contacts_create`           | Create and return a contact with a full name and email.                                                                                                                                                                                             |
