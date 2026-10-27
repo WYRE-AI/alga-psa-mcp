@@ -1,12 +1,12 @@
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer } from './server.js';
-import { runWithCredentials } from './alga-client.js';
+import { runWithCredentials, validateTenantId } from './alga-client.js';
 import { selectTools } from './tools/index.js';
 import { logger } from './utils/logger.js';
 import { MAX_REQUEST_BODY_BYTES } from './input-limits.js';
 import { verifyS2sHeader, S2S_HEADER } from './s2s-verify.js';
-import { validateInstanceUrl, warnPrivateOverride } from './ssrf.js';
+import { validateInstanceUrl, warnPrivateOverride, InstanceUrlError } from './ssrf.js';
 
 // Conduit service-to-service auth (gateway#377 parity). HTTP startup fails
 // closed: an empty CONDUIT_S2S_SECRET, or a known placeholder, refuses to
@@ -189,7 +189,12 @@ export async function startHttpServer(): Promise<HttpServer> {
       if (isGatewayMode) {
         const apiKey = headerValue(req.headers['x-alga-api-key']);
         const instanceUrl = headerValue(req.headers['x-alga-instance-url']);
-        const tenantId = headerValue(req.headers['x-alga-tenant-id']);
+        let tenantId = headerValue(req.headers['x-alga-tenant-id']);
+        try { tenantId = validateTenantId(tenantId); } catch (error) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: (error as Error).message }));
+          return;
+        }
         if (!apiKey || !instanceUrl) {
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Missing required X-Alga-Api-Key or X-Alga-Instance-Url header.' }));
@@ -198,7 +203,7 @@ export async function startHttpServer(): Promise<HttpServer> {
         try { await validateInstanceUrl(instanceUrl); }
         catch {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid Alga instance URL or disallowed network address.' }));
+          res.end(JSON.stringify({ error: new InstanceUrlError().message }));
           return;
         }
         await runWithCredentials({ apiKey, instanceUrl, tenantId }, handle);

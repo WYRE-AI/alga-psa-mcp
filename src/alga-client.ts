@@ -21,12 +21,15 @@ export class AlgaForbiddenError extends AlgaApiError {}
 export class AlgaRateLimitError extends AlgaApiError {}
 export function apiFailure(status: number): AlgaApiError {
   const messages: Record<number, string> = {
-    400: 'Alga rejected the request', 401: 'Alga rejected the API key',
-    403: 'The service user lacks permission', 404: 'Record not found or not visible',
-    409: 'The record conflicts with its current state', 422: 'Alga rejected the field values',
-    429: 'Alga rate limit exceeded; try again shortly',
+    400: 'Alga rejected the request. Check the IDs and field values and try again',
+    401: 'Alga rejected the API key. Check the API key in the connection settings, or create a new one in Alga under Profile → API Keys',
+    403: "The Alga user this API key belongs to doesn't have permission for this action. Ask an Alga admin to add it to that user's role",
+    404: "Record not found, or the API key's user can't see it. Check the ID",
+    409: "The record changed or is in a state that doesn't allow this. Get the record again and retry",
+    422: 'Alga rejected one or more field values. Check required fields and formats and try again',
+    429: 'Alga is rate limiting requests. Wait a minute and try again.',
   };
-  const message = `${messages[status] || (status >= 300 && status < 400 ? 'Alga redirect refused' : 'Alga API request failed')} (HTTP ${status}).`;
+  const message = `${messages[status] || (status >= 300 && status < 400 ? 'Alga redirected the request, which is not allowed. Check that the instance URL is the exact https:// address you use to sign in, with no path' : status >= 500 ? 'Alga is having a server problem. Try again shortly; if it keeps failing, contact Alga support.' : 'Alga API request failed. Check the connection settings and try again.')} (HTTP ${status}).`;
   const Kind = status === 401 ? AlgaAuthError : status === 403 ? AlgaForbiddenError : status === 429 ? AlgaRateLimitError : AlgaApiError;
   return new Kind(message, status);
 }
@@ -45,14 +48,15 @@ export interface ClientOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 export async function requestAlga(creds: AlgaCredentials, method: Method, path: string, query: Record<string, unknown> = {}, body?: unknown, options: ClientOptions = {}): Promise<unknown> {
+  const tenantId = validateTenantId(creds.tenantId);
   const base = await validateInstanceUrl(creds.instanceUrl);
-  if (!path.startsWith('/') || path.startsWith('//') || /[?#\\]/.test(path)) throw new AlgaApiError('Invalid API path.');
+  if (!path.startsWith('/') || path.startsWith('//') || /[?#\\]/.test(path)) throw new AlgaApiError('Invalid API path. Check the tool path before retrying.');
   const url = new URL(`${base.origin}/api/v1${path}`);
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) url.searchParams.set(key, String(key === 'page' ? clampPage(value) : key === 'limit' ? clampLimit(value) : value));
   }
   const headers: Record<string, string> = { 'x-api-key': creds.apiKey, accept: 'application/json' };
-  if (creds.tenantId) headers['x-tenant-id'] = creds.tenantId;
+  if (tenantId) headers['x-tenant-id'] = tenantId;
   if (body !== undefined) headers['content-type'] = 'application/json';
   const agent = createInstanceAgent();
   try {
@@ -71,11 +75,19 @@ export async function requestAlga(creds: AlgaCredentials, method: Method, path: 
       if (response.status === 204) return { data: null };
       const text = await response.text();
       if (!text) return { data: null };
-      try { return JSON.parse(text); } catch { throw new AlgaApiError('Alga returned an invalid JSON response.'); }
+      try { return JSON.parse(text); } catch { throw new AlgaApiError('Alga returned an invalid JSON response. Check in Alga before retrying a change; try reads again shortly.'); }
     }
   } catch (error) {
     if (error instanceof AlgaApiError) throw error;
     // Vendor bodies and network exceptions can contain credentials; never forward them.
-    throw new AlgaApiError('Alga request failed or timed out.');
+    throw new AlgaApiError(method === 'GET' ? 'The request to Alga timed out or failed. Try again shortly.' : 'The request to Alga timed out or failed. The change may already have been saved; check in Alga before retrying.');
   } finally { await agent.close(); }
+}
+
+export function validateTenantId(value?: string): string | undefined {
+  if (!value?.trim()) return undefined;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    throw new AlgaApiError('Invalid tenant ID. Leave it blank unless Alga support asks you to set it; then enter the UUID they provide.');
+  }
+  return value;
 }

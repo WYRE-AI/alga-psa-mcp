@@ -17,21 +17,21 @@ describe('address classification', () => {
 });
 describe('URL policy', () => {
   it.each(['http://psa.example.com', 'ftp://psa.example.com', 'file:///etc/passwd', 'https://', 'not-url', 'https://user:pass@psa.example.com', 'https://psa.example.com?a=1', 'https://psa.example.com#x', 'https://psa.example.com?', 'https://psa.example.com#', 'https://psa.example.com/path', 'https://localhost', 'https://a.localhost', 'https://localhost.', 'https://metadata.internal', 'https://host.local', 'https://127.1', 'https://2130706433', 'https://0x7f000001', 'https://[::1]', 'https://[::ffff:127.0.0.1]', 'https://169.254.169.254'])('rejects %s', async (value) => {
-    await expect(validateInstanceUrl(value, false, resolvePublic)).rejects.toThrow('Invalid Alga');
+    await expect(validateInstanceUrl(value, false, resolvePublic)).rejects.toThrow('The Alga instance URL');
   });
   it('accepts public hosts with ports and normalizes the origin', async () => {
     expect((await validateInstanceUrl('https://psa.example.com:8443/', false, resolvePublic)).origin).toBe('https://psa.example.com:8443');
     expect(resolvePublic).toHaveBeenCalledWith('psa.example.com', { all: true });
   });
   it.each(blocked.filter((a) => a !== 'not-an-ip'))('rejects DNS answer %s', async (address) => {
-    await expect(validateInstanceUrl('https://psa.example.com', false, async () => [{ address, family: address.includes(':') ? 6 : 4 }])).rejects.toThrow('Invalid Alga');
+    await expect(validateInstanceUrl('https://psa.example.com', false, async () => [{ address, family: address.includes(':') ? 6 : 4 }])).rejects.toThrow('The Alga instance URL');
   });
   it('rejects mixed public/private answers even if public comes first', async () => {
     await expect(validateInstanceUrl('https://psa.example.com', false, async () => [{ address: '8.8.8.8', family: 4 }, { address: '10.0.0.1', family: 4 }])).rejects.toThrow();
   });
   it('rejects lookup failure and empty answers without disclosing errors', async () => {
     for (const resolve of [async () => [], async () => { throw new Error('sensitive'); }]) {
-      await expect(validateInstanceUrl('https://psa.example.com', false, resolve)).rejects.toThrow('Invalid Alga');
+      await expect(validateInstanceUrl('https://psa.example.com', false, resolve)).rejects.toThrow('The Alga instance URL');
     }
   });
   it('permits private HTTP only with the env override', async () => {
@@ -63,7 +63,7 @@ describe('socket DNS pinning', () => {
   it('blocks a rebinding answer after preflight passed', async () => {
     const resolve = vi.fn().mockResolvedValueOnce([{ address: '8.8.8.8', family: 4 }]).mockResolvedValueOnce([{ address: '127.0.0.1', family: 4 }]);
     await validateInstanceUrl('https://psa.example.com', false, resolve);
-    await expect(connectLookup(resolve)).rejects.toThrow('Invalid Alga');
+    await expect(connectLookup(resolve)).rejects.toThrow('The Alga instance URL');
     expect(resolve).toHaveBeenCalledTimes(2);
   });
   it('pins a checked numeric address to the connector', async () => {

@@ -2,17 +2,17 @@ import { it, expect, vi, afterEach } from 'vitest';
 import { ALL_TOOLS, selectTools, listTools, dispatchToolCall } from '../tools/index.js';
 import { validateArgs } from '../executor.js';
 afterEach(() => vi.restoreAllMocks());
-it('has exactly 70 unique tools: 40 read, 18 write, 12 destructive', () => {
-  expect(ALL_TOOLS).toHaveLength(70);
-  expect(new Set(ALL_TOOLS.map((t) => t.name)).size).toBe(70);
-  for (const [tier, count] of [['read', 40], ['write', 18], ['destructive', 12]] as const) expect(ALL_TOOLS.filter((t) => t.tier === tier)).toHaveLength(count);
-  expect(selectTools({})).toHaveLength(58);
+it('has exactly 71 unique tools: 41 read, 18 write, 12 destructive', () => {
+  expect(ALL_TOOLS).toHaveLength(71);
+  expect(new Set(ALL_TOOLS.map((t) => t.name)).size).toBe(71);
+  for (const [tier, count] of [['read', 41], ['write', 18], ['destructive', 12]] as const) expect(ALL_TOOLS.filter((t) => t.tier === tier)).toHaveLength(count);
+  expect(selectTools({})).toHaveLength(59);
 });
-it.each(['true', 'TRUE', '1'])('enables destructive with %s', (value) => expect(selectTools({ ALGA_ENABLE_DESTRUCTIVE: value })).toHaveLength(70));
-it.each(['false', '0', 'yes', 'truex', ' true ', '2', ''])('does not enable destructive with %s', (value) => expect(selectTools({ ALGA_ENABLE_DESTRUCTIVE: value })).toHaveLength(58));
+it.each(['true', 'TRUE', '1'])('enables destructive with %s', (value) => expect(selectTools({ ALGA_ENABLE_DESTRUCTIVE: value })).toHaveLength(71));
+it.each(['false', '0', 'yes', 'truex', ' true ', '2', ''])('does not enable destructive with %s', (value) => expect(selectTools({ ALGA_ENABLE_DESTRUCTIVE: value })).toHaveLength(59));
 it.each(['true', '1', 'TRUE'])('read-only wins with %s', (value) => {
   const tools = selectTools({ READ_ONLY_MODE: value, ALGA_ENABLE_DESTRUCTIVE: 'true' });
-  expect(tools).toHaveLength(40);
+  expect(tools).toHaveLength(41);
   expect(tools.every((t) => t.tier === 'read')).toBe(true);
 });
 it('annotates every tool, prefixes destructive descriptions and keeps schemas closed', () => {
@@ -48,7 +48,7 @@ it('never exposes prohibited routes or user mutations', () => {
 it('rejects unknown, disabled and read-only writes by name', async () => {
   for (const tool of ALL_TOOLS.filter((t) => t.tier !== 'read')) {
     const result = await dispatchToolCall(tool.name, {}, { READ_ONLY_MODE: 'true', ALGA_ENABLE_DESTRUCTIVE: 'true' });
-    expect(result.isError).toBe(true); expect(JSON.stringify(result)).toContain('disabled');
+    expect(result.isError).toBe(true); expect(JSON.stringify(result)).toContain('turned off');
   }
   for (const tool of ALL_TOOLS.filter((t) => t.tier === 'destructive')) expect((await dispatchToolCall(tool.name, {}, {})).isError).toBe(true);
   expect((await dispatchToolCall('not_a_tool', {}, {})).isError).toBe(true);

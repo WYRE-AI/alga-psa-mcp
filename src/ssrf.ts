@@ -6,7 +6,7 @@ import { Agent } from 'undici';
 import { logger } from './utils/logger.js';
 
 export class InstanceUrlError extends Error {
-  constructor() { super('Invalid Alga instance URL or disallowed network address.'); }
+  constructor() { super("The Alga instance URL isn't valid. Use the https:// address you sign in to Alga with and nothing after the domain, for example https://psa.example.com. Private and internal network addresses aren't allowed."); }
 }
 export type Resolver = (hostname: string, options: { all: true }) => Promise<{ address: string; family: number }[]>;
 export const privateInstancesAllowed = () => process.env.ALGA_ALLOW_PRIVATE_INSTANCE === 'true';
@@ -44,11 +44,11 @@ export function parseInstanceUrl(value: string, allowPrivate = privateInstancesA
     if ((!allowPrivate && url.protocol !== 'https:') ||
         (allowPrivate && !['https:', 'http:'].includes(url.protocol)) ||
         !hostname || url.username || url.password || url.search || url.hash ||
-        value.includes('?') || value.includes('#') || (url.pathname !== '/' && url.pathname !== '')) throw new InstanceUrlError();
+        value.includes('?') || value.includes('#') || !['/', '', '/api/v1', '/api/v1/'].includes(url.pathname)) throw new InstanceUrlError();
     const normalized = hostname.toLowerCase().replace(/\.$/, '');
     if (!allowPrivate && (/^(localhost|internal|local)$|\.(localhost|internal|local)$/.test(normalized) ||
         (isIP(hostname) !== 0 && isDisallowedAddress(hostname)))) throw new InstanceUrlError();
-    return url;
+    return new URL(url.origin);
   } catch { throw new InstanceUrlError(); }
 }
 

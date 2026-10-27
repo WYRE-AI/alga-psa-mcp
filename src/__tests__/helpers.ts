@@ -13,7 +13,7 @@ export function routeTests(cases: RouteCase[]) {
   let fetch: MockedFunction<typeof undici.fetch>;
   beforeEach(() => {
     vi.stubEnv('AUTH_MODE', 'env'); vi.stubEnv('ALGA_INSTANCE_URL', 'https://psa.example.com');
-    vi.stubEnv('ALGA_API_KEY', KEY); vi.stubEnv('ALGA_TENANT_ID', 'tenant-a');
+    vi.stubEnv('ALGA_API_KEY', KEY); vi.stubEnv('ALGA_TENANT_ID', '12345678-1234-1234-1234-123456789abc');
     vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', 'false');
     vi.spyOn(dns, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never);
     fetch = vi.spyOn(undici, 'fetch').mockResolvedValue(json({ data: [{ id: 'result' }], pagination: { page: 2 } }) as unknown as Awaited<ReturnType<typeof undici.fetch>>);
@@ -33,7 +33,7 @@ export function routeTests(cases: RouteCase[]) {
       expect(init?.method).toBe(method);
       expect(init?.redirect).toBe('manual');
       expect(init?.dispatcher).toBeInstanceOf(undici.Agent);
-      expect(init?.headers).toMatchObject({ 'x-api-key': KEY, 'x-tenant-id': 'tenant-a' });
+      expect(init?.headers).toMatchObject({ 'x-api-key': KEY, 'x-tenant-id': '12345678-1234-1234-1234-123456789abc' });
       expect(init?.body ? JSON.parse(String(init.body)) : undefined).toEqual(body);
       expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual({ data: [{ id: 'result' }], pagination: { page: 2 } });
     });

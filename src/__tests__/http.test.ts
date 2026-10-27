@@ -11,7 +11,7 @@ import { KEY, json } from './helpers.js';
 const SECRET = 'test-s2s-fixture-opaque-value';
 const servers: Server[] = [];
 const proof = (secret = SECRET, t = Math.floor(Date.now() / 1000)) => `t=${t},v1=${createHmac('sha256', secret).update(`t=${t}`).digest('hex')}`;
-const creds = { 'x-alga-api-key': KEY, 'x-alga-instance-url': 'https://psa.example.com', 'x-alga-tenant-id': 'tenant-header' };
+const creds = { 'x-alga-api-key': KEY, 'x-alga-instance-url': 'https://psa.example.com', 'x-alga-tenant-id': '12345678-1234-1234-1234-123456789abc' };
 const toolCall = (name = 'alga_users_list', args = {}) => JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
 async function listen() {
   const server = await startHttpServer(); servers.push(server);
@@ -35,7 +35,7 @@ function send(port: number, headers: Record<string, string> = {}, body = toolCal
 beforeEach(() => {
   vi.stubEnv('CONDUIT_S2S_SECRET', SECRET); vi.stubEnv('MCP_HTTP_PORT', '0'); vi.stubEnv('MCP_HTTP_HOST', '127.0.0.1');
   vi.stubEnv('AUTH_MODE', 'gateway'); vi.stubEnv('ALGA_API_KEY', 'env-only-key'); vi.stubEnv('ALGA_INSTANCE_URL', 'https://env.example.com');
-  vi.stubEnv('ALGA_TENANT_ID', 'env-tenant'); vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', 'false');
+  vi.stubEnv('ALGA_TENANT_ID', '12345678-1234-1234-1234-123456789abc'); vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', 'false');
   vi.stubEnv('READ_ONLY_MODE', 'false'); vi.stubEnv('ALGA_ENABLE_DESTRUCTIVE', 'false');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.mocked(lookup).mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never);
@@ -93,7 +93,7 @@ it('uses per-request credentials and never uses environment tenant or key', asyn
   const { port } = await listen();
   const result = await send(port, { ...creds, 'x-gateway-s2s': proof() });
   expect(result.status).toBe(200); expect(fetch).toHaveBeenCalledTimes(1);
-  expect(vi.mocked(fetch).mock.calls[0][1]?.headers).toMatchObject({ 'x-api-key': KEY, 'x-tenant-id': 'tenant-header' });
+  expect(vi.mocked(fetch).mock.calls[0][1]?.headers).toMatchObject({ 'x-api-key': KEY, 'x-tenant-id': '12345678-1234-1234-1234-123456789abc' });
   expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain('https://psa.example.com/api/v1/users');
   for (const text of [result.text, JSON.stringify(vi.mocked(console.error).mock.calls)]) for (const secret of [KEY, SECRET, 'env-only-key']) expect(text).not.toContain(secret);
 });
@@ -115,14 +115,14 @@ it('keeps concurrent requests in separate credential contexts without sessions',
 it('env mode reads standalone credentials with S2S enforced', async () => {
   vi.stubEnv('AUTH_MODE', 'env'); const { port } = await listen();
   expect((await send(port, { 'x-gateway-s2s': proof() })).status).toBe(200);
-  expect(vi.mocked(fetch).mock.calls[0][1]?.headers).toMatchObject({ 'x-api-key': 'env-only-key', 'x-tenant-id': 'env-tenant' });
+  expect(vi.mocked(fetch).mock.calls[0][1]?.headers).toMatchObject({ 'x-api-key': 'env-only-key', 'x-tenant-id': '12345678-1234-1234-1234-123456789abc' });
 });
 it('health is unauthenticated liveness with no DNS or vendor calls or secrets', async () => {
   const { port } = await listen();
   const result = await send(port, {}, '', '/health', 'GET');
   expect(result.status).toBe(200); expect(JSON.parse(result.text)).toMatchObject({ status: 'ok', mode: 'gateway' });
   expect(lookup).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
-  for (const secret of [KEY, SECRET, 'env-only-key', 'env-tenant']) expect(result.text).not.toContain(secret);
+  for (const secret of [KEY, SECRET, 'env-only-key', '12345678-1234-1234-1234-123456789abc']) expect(result.text).not.toContain(secret);
 });
 it('returns 404 for unknown paths', async () => {
   const { port } = await listen(); expect((await send(port, {}, '', '/other', 'GET')).status).toBe(404);
@@ -143,7 +143,7 @@ it('supports stateless initialize and tools/list', async () => {
   const init = await send(port, headers, JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } } }));
   expect(init.status).toBe(200);
   const list = await send(port, headers, JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }));
-  expect(list.status).toBe(200); expect(JSON.parse(list.text).result.tools).toHaveLength(58);
+  expect(list.status).toBe(200); expect(JSON.parse(list.text).result.tools).toHaveLength(59);
   expect(fetch).not.toHaveBeenCalled();
 });
 it('rejects disabled and oversized tool inputs at the MCP boundary', async () => {
@@ -158,4 +158,18 @@ it('verifies timestamp bounds and malformed signatures', () => {
   expect(verifyS2sHeader(proof(), SECRET)).toBe(true);
   for (const value of [proof(SECRET, Math.floor(Date.now() / 1000) + 301), proof(SECRET, 1), 't=NaN,v1=00', 't=1,v1=' + 'a'.repeat(63), 't=9999999999999999,v1=' + '0'.repeat(64), undefined]) expect(verifyS2sHeader(value, SECRET)).toBe(false);
   expect(verifyS2sHeader(proof(), '')).toBe(false);
+});
+
+it('rejects a malformed tenant UUID before MCP or API access', async () => {
+  const { port } = await listen();
+  const result = await send(port, { ...creds, 'x-gateway-s2s': proof(), 'x-alga-tenant-id': 'wrong' });
+  expect(result.status).toBe(400);
+  expect(result.text).toContain('Leave it blank');
+  expect(fetch).not.toHaveBeenCalled();
+});
+it('ignores an empty tenant header', async () => {
+  const { port } = await listen();
+  const result = await send(port, { ...creds, 'x-gateway-s2s': proof(), 'x-alga-tenant-id': '' });
+  expect(result.status).toBe(200);
+  expect(vi.mocked(fetch).mock.calls[0][1]?.headers).not.toHaveProperty('x-tenant-id');
 });

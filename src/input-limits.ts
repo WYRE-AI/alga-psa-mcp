@@ -47,7 +47,7 @@ export function toolInputTooLargeResult(toolName: string, max = MAX_TOOL_INPUT_E
     content: [
       {
         type: 'text' as const,
-        text: `Invalid arguments for tool ${toolName}: arguments contain more than the maximum of ${max} elements`,
+        text: `Invalid arguments for tool ${toolName}: arguments contain more than the maximum of ${max} elements. Reduce the input and try again.`,
       },
     ],
     isError: true,

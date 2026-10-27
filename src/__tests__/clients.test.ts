@@ -7,5 +7,5 @@ routeTests([
   ['alga_clients_create', 'POST', '/clients', { client_name: 'Acme', billing_cycle: 'monthly' }, {}, { client_name: 'Acme', billing_cycle: 'monthly' }],
   ['alga_clients_update', 'PUT', '/clients/c1', { id: 'c1', phone_no: '123' }, {}, { phone_no: '123' }],
   ['alga_clients_delete', 'DELETE', '/clients/c1', { id: 'c1' }],
-  ['alga_clients_merge', 'POST', '/clients/source/merge', { id: 'source', target_client_id: 'target' }, {}, { target_client_id: 'target' }],
+  ['alga_clients_merge', 'POST', '/clients/target/merge', { id: 'target', source_client_id: 'source' }, {}, { source_client_id: 'source' }],
 ]);

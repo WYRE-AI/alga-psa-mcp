@@ -6,7 +6,7 @@ import { dispatchToolCall } from '../tools/index.js';
 import { renderResponse, MAX_RESPONSE_BYTES } from '../executor.js';
 import { logger } from '../utils/logger.js';
 import { json, KEY } from './helpers.js';
-const creds = { apiKey: KEY, instanceUrl: 'https://psa.example.com', tenantId: 'tenant-a' };
+const creds = { apiKey: KEY, instanceUrl: 'https://psa.example.com', tenantId: '12345678-1234-1234-1234-123456789abc' };
 const sleep = vi.fn(async (_ms: number) => {});
 const mockResponse = (status: number, headers = {}) => json({ error: { message: KEY } }, status, headers) as unknown as Awaited<ReturnType<typeof fetch>>;
 beforeEach(() => {
@@ -21,7 +21,7 @@ it('sends API and tenant headers, manual redirects, a 30s timeout and safe dispa
   await requestAlga(creds, 'GET', '/clients', { page: 0, limit: 500, search: 'a&b' });
   const [url, init] = vi.mocked(fetch).mock.calls[0];
   expect(String(url)).toBe('https://psa.example.com/api/v1/clients?page=1&limit=100&search=a%26b');
-  expect(init).toMatchObject({ redirect: 'manual', headers: { 'x-api-key': KEY, 'x-tenant-id': 'tenant-a' } });
+  expect(init).toMatchObject({ redirect: 'manual', headers: { 'x-api-key': KEY, 'x-tenant-id': '12345678-1234-1234-1234-123456789abc' } });
   expect(init?.dispatcher).toBeDefined(); expect(timeout).toHaveBeenCalledWith(30_000);
 });
 it('omits optional tenant header and supports explicit timeout', async () => {
@@ -56,7 +56,7 @@ it('parses Retry-After seconds, HTTP dates, caps and fallback backoff', () => {
 });
 it.each([301, 302, 303, 307, 308])('refuses HTTP %s without following the redirect', async (status) => {
   vi.mocked(fetch).mockResolvedValue(mockResponse(status, { location: 'http://169.254.169.254/' }));
-  await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow('redirect refused');
+  await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow('redirected the request');
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 it.each([400, 401, 403, 404, 409, 422, 429, 500])('maps HTTP %s without reflecting upstream errors', async (status) => {
@@ -69,9 +69,9 @@ it.each([400, 401, 403, 404, 409, 422, 429, 500])('maps HTTP %s without reflecti
 });
 it('sanitizes network and response-body failures', async () => {
   vi.mocked(fetch).mockRejectedValueOnce(new Error(`failed ${KEY}`));
-  await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow('Alga request failed or timed out.');
+  await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow('The request to Alga timed out or failed. Try again shortly.');
   vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream({ start(c) { c.error(new Error(KEY)); } })) as never);
-  await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow('Alga request failed or timed out.');
+  await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow('The request to Alga timed out or failed. Try again shortly.');
 });
 it('rejects invalid JSON successes, handles empty successes', async () => {
   vi.mocked(fetch).mockResolvedValueOnce(new Response('oops') as never);
@@ -93,7 +93,7 @@ it('never falls back to env in gateway mode and isolates concurrent credential c
   await Promise.all([check('a'), check('b')]); expect(getCredentials()).toBeNull();
 });
 it('reads standalone env credentials', () => {
-  vi.stubEnv('AUTH_MODE', 'env'); vi.stubEnv('ALGA_API_KEY', KEY); vi.stubEnv('ALGA_INSTANCE_URL', creds.instanceUrl); vi.stubEnv('ALGA_TENANT_ID', 'tenant-a');
+  vi.stubEnv('AUTH_MODE', 'env'); vi.stubEnv('ALGA_API_KEY', KEY); vi.stubEnv('ALGA_INSTANCE_URL', creds.instanceUrl); vi.stubEnv('ALGA_TENANT_ID', '12345678-1234-1234-1234-123456789abc');
   expect(getCredentials()).toEqual(creds);
 });
 it('caps compact response bytes with a truncation note and redacts secrets', () => {

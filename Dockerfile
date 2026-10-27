@@ -30,5 +30,5 @@ LABEL io.modelcontextprotocol.server.name="io.github.WYRE-AI/alga-psa-mcp" \
       org.opencontainers.image.revision="${COMMIT_SHA}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.source="https://github.com/WYRE-AI/alga-psa-mcp" \
-      org.opencontainers.image.vendor="WYRE Technology" \
+      org.opencontainers.image.vendor="WYRE AI" \
       org.opencontainers.image.licenses="Apache-2.0"

@@ -1,7 +1,7 @@
 {
   "name": "@wyre-ai/alga-psa-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Alga PSA with 70 curated tools",
+  "description": "MCP server for Alga PSA with 71 curated tools",
   "type": "module",
   "main": "./dist/index.js",
   "bin": {
@@ -16,10 +16,10 @@
     "type": "git",
     "url": "https://github.com/WYRE-AI/alga-psa-mcp"
   },
-  "author": "WYRE Technology",
+  "author": "WYRE AI",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsup",

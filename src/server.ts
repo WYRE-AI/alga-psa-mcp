@@ -19,7 +19,7 @@ export function createServer(): Server {
       return await dispatchToolCall(name, (args || {}) as Record<string, unknown>);
     } catch {
       logger.error('Tool call failed');
-      return { content: [{ type: 'text' as const, text: 'Alga tool request failed.' }], isError: true };
+      return { content: [{ type: 'text' as const, text: 'Alga tool request failed. Try again; if it keeps failing, check the connection settings.' }], isError: true };
     }
   });
 
