@@ -8,6 +8,8 @@ import {
   clampLimit,
   getCredentials,
   runWithCredentials,
+  setGatewayMode,
+  MAX_UPSTREAM_RESPONSE_BYTES,
   AlgaApiError,
   AlgaAuthError,
   AlgaForbiddenError,
@@ -27,12 +29,20 @@ const mockResponse = (status: number, headers = {}) =>
   json({ error: { message: KEY } }, status, headers) as unknown as Awaited<
     ReturnType<typeof fetch>
   >;
+const failure = (promise: Promise<unknown>) =>
+  promise.then(
+    () => {
+      throw new Error('expected failure');
+    },
+    (error: AlgaApiError) => error,
+  );
 beforeEach(() => {
   vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', 'false');
   vi.mocked(lookup).mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never);
   sleep.mockClear();
 });
 afterEach(() => {
+  setGatewayMode(false);
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
@@ -60,9 +70,7 @@ it('omits optional tenant header and supports explicit timeout', async () => {
 });
 it.each([
   ['GET', 429],
-  ['PUT', 429],
   ['DELETE', 429],
-  ['POST', 429],
   ['GET', 502],
   ['PUT', 503],
   ['DELETE', 504],
@@ -73,6 +81,16 @@ it.each([
   await requestAlga(creds, method, '/clients', {}, undefined, { sleep });
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(sleep).toHaveBeenCalledWith(0);
+});
+it.each(['POST', 'PUT'] as const)('never retries %s HTTP 429', async (method) => {
+  vi.mocked(fetch).mockResolvedValue(mockResponse(429, { 'retry-after': '0' }));
+  const error = await failure(requestAlga(creds, method, '/clients', {}, {}, { sleep }));
+  expect(error).toBeInstanceOf(AlgaRateLimitError);
+  expect(error.message).toBe(
+    'Alga is rate limiting requests (HTTP 429). The change was probably not saved, but check in Alga before retrying, then wait a minute.',
+  );
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(sleep).not.toHaveBeenCalled();
 });
 it.each([502, 503, 504, 500, 408])('never retries POST HTTP %s', async (status) => {
   vi.mocked(fetch).mockResolvedValue(mockResponse(status));
@@ -169,9 +187,9 @@ it('clamps page and limit independently with safe defaults', () => {
   ]).toEqual([25, 1, 100, 25, 7]);
 });
 it('never falls back to env in gateway mode and isolates concurrent credential contexts', async () => {
-  vi.stubEnv('AUTH_MODE', 'gateway');
   vi.stubEnv('ALGA_API_KEY', 'env-key');
   vi.stubEnv('ALGA_INSTANCE_URL', creds.instanceUrl);
+  setGatewayMode(true);
   expect(getCredentials()).toBeNull();
   const check = (apiKey: string) =>
     runWithCredentials({ ...creds, apiKey }, async () => {
@@ -182,6 +200,14 @@ it('never falls back to env in gateway mode and isolates concurrent credential c
     });
   await Promise.all([check('a'), check('b')]);
   expect(getCredentials()).toBeNull();
+  setGatewayMode(false);
+  expect(getCredentials()?.apiKey).toBe('env-key');
+});
+it('ignores AUTH_MODE: only setGatewayMode controls env fallback', () => {
+  vi.stubEnv('AUTH_MODE', 'gateway');
+  vi.stubEnv('ALGA_API_KEY', KEY);
+  vi.stubEnv('ALGA_INSTANCE_URL', creds.instanceUrl);
+  expect(getCredentials()?.apiKey).toBe(KEY);
 });
 it('reads standalone env credentials', () => {
   vi.stubEnv('AUTH_MODE', 'env');
@@ -205,8 +231,78 @@ it('does not log credentials in structured context or exception messages', () =>
   for (const secret of [KEY, 'header-secret', 'other-secret']) expect(output).not.toContain(secret);
 });
 it('rejects arguments and missing credentials before fetch', async () => {
-  vi.stubEnv('AUTH_MODE', 'gateway');
+  setGatewayMode(true);
   expect((await dispatchToolCall('alga_clients_list', {}, {})).isError).toBe(true);
   expect((await dispatchToolCall('alga_clients_list', { unknown: 'x' }, {})).isError).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
+});
+const streamOf = (chunks: number, size: number, onCancel: () => void) => {
+  let sent = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (sent++ >= chunks) controller.close();
+      else controller.enqueue(new Uint8Array(size).fill(0x20));
+    },
+    cancel: onCancel,
+  });
+};
+const GET_TOO_LARGE =
+  'Alga sent a response larger than 5 MiB, so it was not read. Narrow the request with filters, fields or a smaller limit and try again.';
+it('rejects a content-length over the upstream cap without reading the body', async () => {
+  expect(MAX_UPSTREAM_RESPONSE_BYTES).toBe(5 * 1024 * 1024);
+  const cancel = vi.fn();
+  const body = streamOf(1, 10, cancel);
+  vi.mocked(fetch).mockResolvedValue(
+    new Response(body, { status: 200, headers: { 'content-length': '999999' } }) as never,
+  );
+  const error = await failure(
+    requestAlga(creds, 'GET', '/clients', {}, undefined, {
+      maxResponseBytes: 1000,
+    }),
+  );
+  expect(error).toBeInstanceOf(AlgaApiError);
+  expect(error.message).toBe(GET_TOO_LARGE);
+  expect(cancel).toHaveBeenCalled();
+  expect(body.locked).toBe(false);
+});
+it('aborts a chunked stream part-way once it passes the cap', async () => {
+  const cancel = vi.fn();
+  let pulled = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulled++;
+      controller.enqueue(new Uint8Array(400).fill(0x20));
+    },
+    cancel,
+  });
+  vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }) as never);
+  const error = await failure(
+    requestAlga(
+      creds,
+      'POST',
+      '/clients',
+      {},
+      {},
+      {
+        maxResponseBytes: 1000,
+      },
+    ),
+  );
+  expect(error).toBeInstanceOf(AlgaApiError);
+  expect(error.message).toBe(
+    `${GET_TOO_LARGE} The change may already have been saved; check in Alga before retrying.`,
+  );
+  expect(cancel).toHaveBeenCalled();
+  expect(pulled).toBeLessThan(10);
+});
+it('reads a streamed body under the cap, including split multi-byte characters', async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ data: 'é💡' }));
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
+      controller.close();
+    },
+  });
+  vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }) as never);
+  await expect(requestAlga(creds, 'GET', '/clients')).resolves.toEqual({ data: 'é💡' });
 });

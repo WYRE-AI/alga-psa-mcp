@@ -5,10 +5,11 @@ import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { lookup } from 'node:dns/promises';
 import { fetch } from 'undici';
 import { startHttpServer } from '../http.js';
+import { setGatewayMode } from '../alga-client.js';
 import { verifyS2sHeader } from '../s2s-verify.js';
 import { MAX_REQUEST_BODY_BYTES } from '../input-limits.js';
 import { KEY, json } from './helpers.js';
-const SECRET = 'test-s2s-fixture-opaque-value';
+const SECRET = 'test-s2s-fixture-opaque-value-0123456789';
 const servers: Server[] = [];
 const proof = (secret = SECRET, t = Math.floor(Date.now() / 1000)) =>
   `t=${t},v1=${createHmac('sha256', secret).update(`t=${t}`).digest('hex')}`;
@@ -79,7 +80,10 @@ beforeEach(() => {
   vi.stubEnv('ALGA_INSTANCE_URL', 'https://env.example.com');
   vi.stubEnv('ALGA_TENANT_ID', '12345678-1234-1234-1234-123456789abc');
   vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', 'false');
+  vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('MCP_ALLOW_INSECURE_DEV', '');
   vi.stubEnv('READ_ONLY_MODE', 'false');
+  vi.stubEnv('ALGA_ENABLE_WRITES', 'false');
   vi.stubEnv('ALGA_ENABLE_DESTRUCTIVE', 'false');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.mocked(lookup).mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never);
@@ -92,6 +96,7 @@ afterEach(async () => {
   }
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+  setGatewayMode(false);
 });
 it('refuses to start without S2S secret', async () => {
   vi.stubEnv('CONDUIT_S2S_SECRET', '');
@@ -111,11 +116,74 @@ it.each([
   'replace-with-a-real-secret',
   ' SECRET ',
 ])('refuses placeholder %s even with insecure dev enabled', async (secret) => {
+  vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('CONDUIT_S2S_SECRET', secret);
   vi.stubEnv('MCP_ALLOW_INSECURE_DEV', '1');
   await expect(startHttpServer()).rejects.toThrow('known placeholder');
 });
+it.each(['production', 'staging', ''])(
+  'refuses insecure dev with NODE_ENV=%j, before any secret check',
+  async (env) => {
+    vi.stubEnv('NODE_ENV', env);
+    vi.stubEnv('CONDUIT_S2S_SECRET', 'changeme');
+    vi.stubEnv('MCP_ALLOW_INSECURE_DEV', '1');
+    await expect(startHttpServer()).rejects.toThrow(
+      'Refusing to start HTTP transport: MCP_ALLOW_INSECURE_DEV requires NODE_ENV=development.',
+    );
+  },
+);
+it.each(['', '0', 'false'])(
+  'ignores the insecure dev flag value %j outside development',
+  async (v) => {
+    vi.stubEnv('MCP_ALLOW_INSECURE_DEV', v);
+    const { port } = await listen();
+    expect(port).toBeGreaterThan(0);
+  },
+);
+it('starts insecure dev on 127.0.0.1 with NODE_ENV=development and an empty secret', async () => {
+  vi.stubEnv('NODE_ENV', ' Development ');
+  vi.stubEnv('CONDUIT_S2S_SECRET', '');
+  vi.stubEnv('MCP_ALLOW_INSECURE_DEV', '1');
+  const { server } = await listen();
+  expect((server.address() as AddressInfo).address).toBe('127.0.0.1');
+});
+it.each(['a', 'x'.repeat(31)])('refuses a short S2S secret without echoing it', async (secret) => {
+  vi.stubEnv('CONDUIT_S2S_SECRET', secret);
+  const error = await startHttpServer().then(
+    () => new Error('started'),
+    (e: Error) => e,
+  );
+  expect(error.message).toBe(
+    'Refusing to start HTTP transport: CONDUIT_S2S_SECRET must be at least 32 characters. Generate one with `openssl rand -hex 32`.',
+  );
+  if (secret.length > 1) {
+    expect(error.message).not.toContain(secret);
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(secret);
+  }
+});
+it('starts with a 32-character S2S secret', async () => {
+  vi.stubEnv('CONDUIT_S2S_SECRET', 'x'.repeat(32));
+  const { port } = await listen();
+  expect(port).toBeGreaterThan(0);
+});
+it.each(['Gateway', 'garbage', ' gateway2'])('refuses AUTH_MODE=%j', async (mode) => {
+  vi.stubEnv('AUTH_MODE', mode);
+  await expect(startHttpServer()).rejects.toThrow(
+    `AUTH_MODE must be 'gateway' or 'env'. Got ${JSON.stringify(mode)}.`,
+  );
+});
+it.each([undefined, '', ' gateway '])('treats AUTH_MODE=%j as gateway', async (mode) => {
+  if (mode === undefined) delete process.env.AUTH_MODE;
+  else vi.stubEnv('AUTH_MODE', mode);
+  const { port } = await listen();
+  const health = await send(port, {}, '', '/health', 'GET');
+  expect(JSON.parse(health.text)).toMatchObject({ mode: 'gateway' });
+  const result = await send(port, { 'x-gateway-s2s': proof() });
+  expect(result.status).toBe(401);
+  expect(fetch).not.toHaveBeenCalled();
+});
 it('limits insecure dev to loopback and logs a warning', async () => {
+  vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('CONDUIT_S2S_SECRET', '');
   vi.stubEnv('MCP_ALLOW_INSECURE_DEV', '1');
   vi.stubEnv('MCP_HTTP_HOST', '0.0.0.0');
@@ -125,6 +193,7 @@ it('limits insecure dev to loopback and logs a warning', async () => {
   expect((await send(port, creds)).status).toBe(200);
 });
 it('still enforces a configured secret with insecure dev enabled', async () => {
+  vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('MCP_ALLOW_INSECURE_DEV', '1');
   const { port } = await listen();
   expect((await send(port, creds)).status).toBe(401);
@@ -296,7 +365,7 @@ it('supports stateless initialize and tools/list', async () => {
     JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
   );
   expect(list.status).toBe(200);
-  expect(JSON.parse(list.text).result.tools).toHaveLength(59);
+  expect(JSON.parse(list.text).result.tools).toHaveLength(41);
   expect(fetch).not.toHaveBeenCalled();
 });
 it('rejects disabled and oversized tool inputs at the MCP boundary', async () => {

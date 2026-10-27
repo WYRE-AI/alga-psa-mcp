@@ -2,8 +2,9 @@
 
 An Apache-2.0 MCP server for Alga PSA, maintained by WYRE AI. It exposes
 71 curated, hand-written tools over stdio or stateless Streamable HTTP: **41 read,
-18 write, and 12 destructive**. Read and write tools are enabled by default;
-destructive operations require an explicit environment flag.
+18 write, and 12 destructive**. Only the 41 read tools are enabled by default.
+`ALGA_ENABLE_WRITES=true` adds the 18 write tools (59 in total), and
+`ALGA_ENABLE_DESTRUCTIVE=true` on top of that adds the 12 destructive tools (71).
 
 The tools and schemas in this repository are hand-written. No generated API specification or Alga implementation code is included.
 
@@ -16,11 +17,11 @@ The tools and schemas in this repository are hand-written. No generated API spec
    wanted, start with write permission on tickets and time only; add other
    permissions individually when needed.
 3. Under that user's **Profile → API Keys**, create an API key with an expiry.
-   Keys get that user's role permissions; there are **no key scopes**.
+   Keys get that user's role permissions. We haven't confirmed whether enterprise-edition agent keys behave differently, so treat the key as having everything its user can do.
 4. Rotate by creating a new key, updating the deployment, and revoking the old key.
 
-Tool flags narrow the available operations. Alga's role permissions still decide which records and actions the user can reach. Consider
-`READ_ONLY_MODE=true` for initial deployments.
+Tool flags narrow the available operations. Alga's role permissions still decide which records and actions the user can reach. Writes are off by default;
+turn them on only for connections that need them. `READ_ONLY_MODE=true` forces read tools only, even if writes are enabled.
 
 ## Connection and credentials
 
@@ -30,15 +31,16 @@ userinfo, query or fragment.
 
 ### Gateway HTTP
 
-Set `AUTH_MODE=gateway`. Send these headers on every
+`AUTH_MODE` defaults to `gateway` for HTTP (unset or empty means gateway), and
+only `gateway` or `env` is accepted; any other value refuses to start. Send these headers on every
 request to `/mcp`:
 
-| Header                | Required                       | Meaning                                                                                                                                                                                                                                                                                                |
-| --------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `X-Alga-Instance-Url` | Yes                            | The https:// address you use to sign in to Alga, for example https://psa.example.com. A trailing / or /api/v1 is fine; leave off any other path. Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances must be reachable from the internet over HTTPS with a valid certificate. |
-| `X-Alga-Api-Key`      | Yes                            | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role.                                                                                                                      |
-| `X-Alga-Tenant-Id`    | No                             | Optional. Leave blank unless Alga support asks for it. A wrong value makes every request fail.                                                                                                                                                                                                         |
-| `X-Gateway-S2S`       | Yes, except insecure local dev | Timestamped gateway proof                                                                                                                                                                                                                                                                              |
+| Header                | Required                       | Meaning                                                                                                                                                                                                                                                                                                      |
+| --------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `X-Alga-Instance-Url` | Yes                            | The https:// address you use to sign in to Alga, for example https://psa.example.com. A trailing / or /api/v1 is fine; leave off any other path. Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances on a public https:// URL are supported; instances on private networks are not. |
+| `X-Alga-Api-Key`      | Yes                            | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role.                                                                                                                            |
+| `X-Alga-Tenant-Id`    | No                             | Optional. Leave blank unless Alga support asks for it. A wrong value makes every request fail.                                                                                                                                                                                                               |
+| `X-Gateway-S2S`       | Yes, except insecure local dev | Timestamped gateway proof                                                                                                                                                                                                                                                                                    |
 
 Gateway mode **never falls back to environment credentials**, including the tenant
 ID. Missing required credential headers return HTTP 401 JSON `{error: ...}`;
@@ -47,11 +49,12 @@ A tenant ID, when supplied, must be a UUID. Empty tenant values are ignored.
 Credentials are isolated using AsyncLocalStorage. Each request gets its own MCP
 server and stateless transport; no credential-bearing sessions persist.
 
-Set a real `CONDUIT_S2S_SECRET` to start HTTP. The gateway proof has the form
+Set a real `CONDUIT_S2S_SECRET` of at least 32 characters to start HTTP
+(generate one with `openssl rand -hex 32`). The gateway proof has the form
 `t=<unix-seconds>,v1=<hex-HMAC-SHA256>`, signing the literal `t=<unix-seconds>` with
 the configured secret. Proofs outside a five-minute window are refused. Deploy
 the vendor-specific derived S2S secret, not a shared gateway master secret.
-Empty secrets fail startup, and common placeholders such as `changeme`, `secret`
+Empty or shorter secrets fail startup, and common placeholders such as `changeme`, `secret`
 and `replace-with-a-real-secret` are refused even in insecure dev mode.
 
 `GET /health` is unauthenticated process liveness. It returns no credentials and
@@ -60,30 +63,33 @@ or body-size handling. HTTP has no browser CORS allowance; use a trusted gateway
 
 ### Standalone environment
 
-Stdio defaults to environment credentials. For standalone HTTP, set
+Stdio always uses environment credentials. For standalone HTTP, set
 `AUTH_MODE=env`; HTTP still requires S2S unless insecure development is enabled.
 The server does not automatically load `.env` files.
 
-| Variable            | Default                   | Purpose                                                                                                                                                                                                                                                                                                |
-| ------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ALGA_INSTANCE_URL` | Required in standalone    | The https:// address you use to sign in to Alga, for example https://psa.example.com. A trailing / or /api/v1 is fine; leave off any other path. Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances must be reachable from the internet over HTTPS with a valid certificate. |
-| `ALGA_API_KEY`      | Required in standalone    | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role.                                                                                                                      |
-| `ALGA_TENANT_ID`    | Unset                     | Optional. Leave blank unless Alga support asks for it. A wrong value makes every request fail.                                                                                                                                                                                                         |
-| `AUTH_MODE`         | `env` (Docker: `gateway`) | Credential source                                                                                                                                                                                                                                                                                      |
-| `MCP_TRANSPORT`     | `stdio` (Docker: `http`)  | Transport when using the HTTP entry point                                                                                                                                                                                                                                                              |
-| `MCP_HTTP_PORT`     | `8080`                    | HTTP listener port                                                                                                                                                                                                                                                                                     |
-| `MCP_HTTP_HOST`     | `0.0.0.0` with S2S        | Bind host; insecure dev forces `127.0.0.1`                                                                                                                                                                                                                                                             |
-| `LOG_LEVEL`         | `info`                    | `debug`, `info`, `warn`, `error`; logs use stderr                                                                                                                                                                                                                                                      |
+The write tools stay off unless `ALGA_ENABLE_WRITES=true`. It's set once per container and applies to every connection that container serves.
+
+| Variable            | Default                                 | Purpose                                                                                                                                                                                                                                                                                                      |
+| ------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ALGA_INSTANCE_URL` | Required in standalone                  | The https:// address you use to sign in to Alga, for example https://psa.example.com. A trailing / or /api/v1 is fine; leave off any other path. Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances on a public https:// URL are supported; instances on private networks are not. |
+| `ALGA_API_KEY`      | Required in standalone                  | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role.                                                                                                                            |
+| `ALGA_TENANT_ID`    | Unset                                   | Optional. Leave blank unless Alga support asks for it. A wrong value makes every request fail.                                                                                                                                                                                                               |
+| `AUTH_MODE`         | HTTP: `gateway`; stdio: env credentials | HTTP only: `gateway` or `env`, anything else refuses to start. Stdio always uses env credentials                                                                                                                                                                                                             |
+| `MCP_TRANSPORT`     | `stdio` (Docker: `http`)                | Transport when using the HTTP entry point                                                                                                                                                                                                                                                                    |
+| `MCP_HTTP_PORT`     | `8080`                                  | HTTP listener port                                                                                                                                                                                                                                                                                           |
+| `MCP_HTTP_HOST`     | `0.0.0.0` with S2S                      | Bind host; insecure dev forces `127.0.0.1`                                                                                                                                                                                                                                                                   |
+| `LOG_LEVEL`         | `info`                                  | `debug`, `info`, `warn`, `error`; logs use stderr                                                                                                                                                                                                                                                            |
 
 ### Flags
 
-| Variable                      | Default | Behavior                                                                                 |
-| ----------------------------- | ------- | ---------------------------------------------------------------------------------------- |
-| `ALGA_ENABLE_DESTRUCTIVE`     | Off     | Only `true` or `1` (case insensitive) enables destructive tools                          |
-| `READ_ONLY_MODE`              | Off     | Only `true` or `1` exposes read tools alone; wins over destructive enablement            |
-| `ALGA_ALLOW_PRIVATE_INSTANCE` | Off     | Exactly `true` allows private/loopback destinations and HTTP; environment only           |
-| `CONDUIT_S2S_SECRET`          | Unset   | Required real secret for HTTP; never sent to Alga                                        |
-| `MCP_ALLOW_INSECURE_DEV`      | Off     | Exactly `1` permits HTTP without S2S only on loopback; cannot bypass placeholder refusal |
+| Variable                      | Default | Behavior                                                                                                                                                                                                         |
+| ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ALGA_ENABLE_WRITES`          | Off     | Only `true` or `1` (case insensitive) enables write tools; container-wide                                                                                                                                        |
+| `ALGA_ENABLE_DESTRUCTIVE`     | Off     | Only `true` or `1` enables destructive tools, and only when `ALGA_ENABLE_WRITES` is also on                                                                                                                      |
+| `READ_ONLY_MODE`              | Off     | Only `true` or `1` exposes read tools alone; wins over write and destructive enablement                                                                                                                          |
+| `ALGA_ALLOW_PRIVATE_INSTANCE` | Off     | Exactly `true` allows private/loopback destinations and HTTP; environment only. Deployment-wide: applies to every tenant and connection the container serves. Never set it on a shared gateway deployment        |
+| `CONDUIT_S2S_SECRET`          | Unset   | Required for HTTP, at least 32 characters; never sent to Alga                                                                                                                                                    |
+| `MCP_ALLOW_INSECURE_DEV`      | Off     | Exactly `1` permits HTTP without S2S only on loopback, and only with `NODE_ENV=development` (any other non-empty value other than `0` or `false` refuses to start without it); cannot bypass placeholder refusal |
 
 Disabled tools are absent from `tools/list` and rejected if called by name.
 Read tools carry `readOnlyHint: true, destructiveHint: false`. Write tools carry
@@ -106,11 +112,17 @@ and connection. TLS continues to verify the original hostname. Redirects are
 never followed, including redirects to another public origin. The sandbox-only
 `ALGA_ALLOW_PRIVATE_INSTANCE=true` override permits private networks and HTTP,
 retains URL structural restrictions, and logs a loud warning once at startup.
-No request header can enable it.
+It is a deployment-wide switch: it applies to every tenant and connection the
+container serves, so never set it on a shared gateway deployment. Self-hosted
+Alga on a public https URL is supported; instances on private networks are out
+of scope for now. No request header can enable it.
 
-Requests time out after 30 seconds per attempt. HTTP 429 retries at most three
-times, honoring seconds or HTTP-date `Retry-After` values with a 60-second cap.
-GET/PUT/DELETE also retry 502/503/504. POST retries only 429. Other failures become
+Requests time out after 30 seconds per attempt. For GET and DELETE, HTTP 429
+retries at most three times, honoring seconds or HTTP-date `Retry-After` values
+with a 60-second cap. POST and PUT never retry a 429, because the change may
+already have been saved. GET/PUT/DELETE retry 502/503/504; POST never retries
+5xx. Upstream responses are read as a stream and capped at 5 MiB; a larger one
+is aborted with an error asking you to narrow the request. Other failures become
 concise tool errors; upstream error bodies and network exception details are not
 returned. Do not assume a timed-out write failed to reach Alga; inspect the record
 before repeating it.
@@ -121,6 +133,18 @@ at 10,000 elements. Responses are compact JSON retaining data and pagination;
 text above approximately 100 KiB ends with a truncation note. A truncated response
 is a text preview, so narrow the query before parsing it as JSON. Known API keys
 and S2S secrets are redacted from output; logs are restricted and redacted.
+
+## Untrusted content
+
+Ticket subjects and comments, notes, names, descriptions and knowledge base text
+can be written by clients and outside senders. Every successful tool result is
+wrapped as `<untrusted-content nonce="...">...</untrusted-content nonce="...">`,
+preceded by a notice that it is untrusted data and not instructions. The nonce is
+random per response. The data inside is left unchanged (no HTML escaping), except
+that anything resembling an `untrusted-content` marker is defused with a `‹`
+so it cannot forge a closing tag. The truncation note, when present, stays inside
+the envelope. Error messages are always our own fixed text; Alga's error bodies are
+never forwarded.
 
 ## Running locally
 
@@ -155,7 +179,7 @@ in your MCP client's environment, then configure the command:
 For local HTTP with credentials already exported in your shell:
 
 ```sh
-AUTH_MODE=env MCP_ALLOW_INSECURE_DEV=1 MCP_HTTP_HOST=127.0.0.1 npm run start:http
+NODE_ENV=development AUTH_MODE=env MCP_ALLOW_INSECURE_DEV=1 MCP_HTTP_HOST=127.0.0.1 npm run start:http
 ```
 
 Leave `CONDUIT_S2S_SECRET` unset for this local-only bypass. Production must use
@@ -174,7 +198,8 @@ The image uses `node:22-alpine`, runs as the non-root `alga` user, defaults to
 `AUTH_MODE=gateway`, and exposes port 8080. It refuses to start without valid S2S
 configuration. Inject Alga credentials only via the per-request headers, and
 restrict network ingress to the trusted gateway. The healthcheck uses `/health`.
-For sandbox targets, explicitly pass `-e ALGA_ALLOW_PRIVATE_INSTANCE=true`.
+Writes stay off unless you pass `-e ALGA_ENABLE_WRITES=true`.
+For a dedicated sandbox container only, pass `-e ALGA_ALLOW_PRIVATE_INSTANCE=true`; it applies to every connection that container serves.
 
 To use the image over stdio, override its HTTP defaults:
 
@@ -247,6 +272,8 @@ Project phase lists, task lists and task status lists are not paginated. `alga_p
 
 ### Write — 18 tools
 
+Writes (18, hidden unless `ALGA_ENABLE_WRITES=true`). The setting is container-wide: it turns writes on for every connection that container serves, not for one connection.
+
 | Tool                             | Effect / returned result                                                                                                                                                                                                                                                |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `alga_assets_create`             | Create an asset and return it. Needs a client, type, asset tag, name and status.                                                                                                                                                                                        |
@@ -268,7 +295,7 @@ Project phase lists, task lists and task status lists are not paginated. `alga_p
 | `alga_time_entries_create`       | Create a time entry and return it. Needs a service ID, start and end times, and a work item type. If the work item type is ticket or project_task, also pass work_item_id for that ticket or task.                                                                      |
 | `alga_time_entries_update`       | Update a time entry and return it. Pass the time entry ID and only the fields you want to change.                                                                                                                                                                       |
 
-### Destructive — 12 tools (off by default)
+### Destructive — 12 tools (off by default; need `ALGA_ENABLE_WRITES=true` and `ALGA_ENABLE_DESTRUCTIVE=true`)
 
 | Tool                         | Effect / returned result                                                                                                                                                                                                                                                                                     |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

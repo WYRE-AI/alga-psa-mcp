@@ -1,7 +1,7 @@
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer } from './server.js';
-import { runWithCredentials, validateTenantId } from './alga-client.js';
+import { runWithCredentials, setGatewayMode, validateTenantId } from './alga-client.js';
 import { selectTools } from './tools/index.js';
 import { logger } from './utils/logger.js';
 import { MAX_REQUEST_BODY_BYTES } from './input-limits.js';
@@ -10,8 +10,9 @@ import { validateInstanceUrl, warnPrivateOverride, InstanceUrlError } from './ss
 
 // Conduit service-to-service auth (gateway#377 parity). HTTP startup fails
 // closed: an empty CONDUIT_S2S_SECRET, or a known placeholder, refuses to
-// boot unless MCP_ALLOW_INSECURE_DEV=1 (placeholders never qualify). That
-// bypass skips X-Gateway-S2S and binds 127.0.0.1 only. A configured secret
+// boot unless MCP_ALLOW_INSECURE_DEV=1 (placeholders never qualify), and that
+// flag is itself refused unless NODE_ENV=development. A secret under 32
+// characters also refuses. The bypass skips X-Gateway-S2S and binds 127.0.0.1 only. A configured secret
 // is always enforced and still honors MCP_HTTP_HOST (default 0.0.0.0) so
 // container deploys keep their existing bind. The secret value is never logged.
 // See src/s2s-verify.ts.
@@ -40,6 +41,15 @@ const PLACEHOLDER_S2S_SECRET_ERROR =
   'Refusing to start HTTP transport: CONDUIT_S2S_SECRET is a known placeholder. ' +
   'Generate a secret with `openssl rand -hex 32` and set CONDUIT_S2S_SECRET to that value. ' +
   'MCP_ALLOW_INSECURE_DEV does not bypass a placeholder secret.';
+
+const SHORT_S2S_SECRET_ERROR =
+  'Refusing to start HTTP transport: CONDUIT_S2S_SECRET must be at least 32 characters. ' +
+  'Generate one with `openssl rand -hex 32`.';
+
+const INSECURE_DEV_NODE_ENV_ERROR =
+  'Refusing to start HTTP transport: MCP_ALLOW_INSECURE_DEV requires NODE_ENV=development.';
+
+const MIN_S2S_SECRET_LENGTH = 32;
 
 const INSECURE_DEV_WARNING =
   'SECURITY WARNING: CONDUIT_S2S_SECRET is empty and MCP_ALLOW_INSECURE_DEV=1. ' +
@@ -75,9 +85,21 @@ function refuseStart(message: string): never {
  * always refuses, including when the dev flag is set. The secret is never logged.
  */
 function resolveS2sSecret(): string {
+  const devFlag = (process.env.MCP_ALLOW_INSECURE_DEV ?? '').trim().toLowerCase();
+  if (
+    devFlag !== '' &&
+    devFlag !== '0' &&
+    devFlag !== 'false' &&
+    (process.env.NODE_ENV ?? '').trim().toLowerCase() !== 'development'
+  ) {
+    refuseStart(INSECURE_DEV_NODE_ENV_ERROR);
+  }
   const secret = (process.env.CONDUIT_S2S_SECRET ?? '').trim();
   if (secret && KNOWN_PLACEHOLDER_SECRETS.has(secret.toLowerCase())) {
     refuseStart(PLACEHOLDER_S2S_SECRET_ERROR);
+  }
+  if (secret.length > 0 && secret.length < MIN_S2S_SECRET_LENGTH) {
+    refuseStart(SHORT_S2S_SECRET_ERROR);
   }
   if (secret) return secret;
 
@@ -88,6 +110,15 @@ function resolveS2sSecret(): string {
   }
 
   refuseStart(MISSING_S2S_SECRET_ERROR);
+}
+
+/** AUTH_MODE for HTTP: unset or empty is gateway; anything but gateway|env refuses to start. */
+export function resolveAuthMode(): 'gateway' | 'env' {
+  const raw = process.env.AUTH_MODE ?? '';
+  const mode = raw.trim();
+  if (mode === '') return 'gateway';
+  if (mode === 'gateway' || mode === 'env') return mode;
+  refuseStart(`AUTH_MODE must be 'gateway' or 'env'. Got ${JSON.stringify(raw.slice(0, 40))}.`);
 }
 
 /**
@@ -111,11 +142,13 @@ function resolveListenHost(s2sSecret: string): string {
 
 export async function startHttpServer(): Promise<HttpServer> {
   const s2sSecret = resolveS2sSecret();
+  const authMode = resolveAuthMode();
   selectTools();
   warnPrivateOverride();
   const port = parseInt(process.env.MCP_HTTP_PORT || '8080', 10);
   const host = resolveListenHost(s2sSecret);
-  const isGatewayMode = process.env.AUTH_MODE === 'gateway';
+  const isGatewayMode = authMode === 'gateway';
+  setGatewayMode(isGatewayMode);
 
   const httpServer = createHttpServer((req, res) => {
     const route = async () => {

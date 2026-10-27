@@ -44,7 +44,10 @@ export function routeTests(cases: RouteCase[]) {
   for (const [name, method, path, args = {}, query = {}, body] of cases) {
     it(`${name} sends ${method} ${path}`, async () => {
       expect(getCredentials()?.apiKey).toBe(KEY);
-      const result = await dispatchToolCall(name, args, { ALGA_ENABLE_DESTRUCTIVE: 'true' });
+      const result = await dispatchToolCall(name, args, {
+        ALGA_ENABLE_WRITES: 'true',
+        ALGA_ENABLE_DESTRUCTIVE: 'true',
+      });
       expect(result.isError, JSON.stringify(result)).not.toBe(true);
       expect(fetch).toHaveBeenCalledTimes(1);
       const [rawUrl, init] = fetch.mock.calls[0];
@@ -62,11 +65,16 @@ export function routeTests(cases: RouteCase[]) {
         'x-tenant-id': '12345678-1234-1234-1234-123456789abc',
       });
       expect(init?.body ? JSON.parse(String(init.body)) : undefined).toEqual(body);
-      expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual({
+      expect(JSON.parse(unwrap((result.content[0] as { text: string }).text))).toEqual({
         data: [{ id: 'result' }],
         pagination: { page: 2 },
       });
     });
   }
 }
+/** Strips the untrusted-content envelope from a successful tool result. */
+export const unwrap = (text: string) =>
+  text
+    .replace(/^[^\n]*\n<untrusted-content nonce="[0-9a-f]+">\n/, '')
+    .replace(/\n<\/untrusted-content nonce="[0-9a-f]+">$/, '');
 export const page = { page: 1, limit: 25 };

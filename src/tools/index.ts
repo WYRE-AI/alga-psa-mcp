@@ -9,10 +9,11 @@ import { invoices } from './invoices.js';
 import { catalog } from './catalog.js';
 import { schedules } from './schedules.js';
 import { knowledge } from './knowledge.js';
-import { selectEnabled, toMcpTool } from './registry.js';
+import { disabledReason, selectEnabled, toMcpTool } from './registry.js';
 import { executeTool, ToolArgumentError } from '../executor.js';
 import { AlgaApiError } from '../alga-client.js';
 import { InstanceUrlError } from '../ssrf.js';
+import { wrapUntrusted } from '../untrusted.js';
 
 /** The single inventory of all 71 hand-written Alga tools. */
 export const ALL_TOOLS = [
@@ -40,12 +41,9 @@ export async function dispatchToolCall(
 ): Promise<CallToolResult> {
   const tool = ALL_TOOLS.find((entry) => entry.name === name);
   if (!tool) return errorResult('Unknown tool. Choose a tool from tools/list.');
-  if (!selectTools(env).includes(tool))
-    return errorResult(
-      'This tool is turned off for this connection. An admin can enable write or destructive tools in the connection settings.',
-    );
+  if (!selectTools(env).includes(tool)) return errorResult(disabledReason(tool, env));
   try {
-    return { content: [{ type: 'text', text: await executeTool(tool, args) }] };
+    return { content: [{ type: 'text', text: wrapUntrusted(await executeTool(tool, args)) }] };
   } catch (error) {
     return errorResult(
       error instanceof ToolArgumentError ||

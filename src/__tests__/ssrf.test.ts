@@ -92,6 +92,14 @@ describe('URL policy', () => {
       'The Alga instance URL',
     );
   });
+  it('pins the default: with ALGA_ALLOW_PRIVATE_INSTANCE unset, http and 127.0.0.1 are rejected', async () => {
+    vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', '');
+    delete process.env.ALGA_ALLOW_PRIVATE_INSTANCE;
+    for (const value of ['http://psa.example.com', 'http://127.0.0.1', 'https://127.0.0.1'])
+      await expect(validateInstanceUrl(value, undefined, resolvePublic)).rejects.toThrow(
+        'The Alga instance URL',
+      );
+  });
   it('accepts public hosts with ports and normalizes the origin', async () => {
     expect(
       (await validateInstanceUrl('https://psa.example.com:8443/', false, resolvePublic)).origin,
