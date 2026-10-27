@@ -57,7 +57,10 @@ function headerValue(value: string | string[] | undefined): string | undefined {
 }
 
 function isLoopbackHost(host: string): boolean {
-  const normalized = host.trim().toLowerCase().replace(/^\[(.+)\]$/, '$1');
+  const normalized = host
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.+)\]$/, '$1');
   return normalized === '127.0.0.1' || normalized === 'localhost' || normalized === '::1';
 }
 
@@ -129,7 +132,7 @@ export async function startHttpServer(): Promise<HttpServer> {
             transport: 'http',
             mode: isGatewayMode ? 'gateway' : 'standalone',
             timestamp: new Date().toISOString(),
-          })
+          }),
         );
         return;
       }
@@ -156,7 +159,10 @@ export async function startHttpServer(): Promise<HttpServer> {
         res.end(
           JSON.stringify({
             jsonrpc: '2.0',
-            error: { code: -32600, message: `Request body exceeds ${MAX_REQUEST_BODY_BYTES} bytes` },
+            error: {
+              code: -32600,
+              message: `Request body exceeds ${MAX_REQUEST_BODY_BYTES} bytes`,
+            },
             id: null,
           }),
         );
@@ -190,18 +196,25 @@ export async function startHttpServer(): Promise<HttpServer> {
         const apiKey = headerValue(req.headers['x-alga-api-key']);
         const instanceUrl = headerValue(req.headers['x-alga-instance-url']);
         let tenantId = headerValue(req.headers['x-alga-tenant-id']);
-        try { tenantId = validateTenantId(tenantId); } catch (error) {
+        try {
+          tenantId = validateTenantId(tenantId);
+        } catch (error) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: (error as Error).message }));
           return;
         }
         if (!apiKey || !instanceUrl) {
           res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Missing required X-Alga-Api-Key or X-Alga-Instance-Url header.' }));
+          res.end(
+            JSON.stringify({
+              error: 'Missing required X-Alga-Api-Key or X-Alga-Instance-Url header.',
+            }),
+          );
           return;
         }
-        try { await validateInstanceUrl(instanceUrl); }
-        catch {
+        try {
+          await validateInstanceUrl(instanceUrl);
+        } catch {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: new InstanceUrlError().message }));
           return;
@@ -224,7 +237,9 @@ export async function startHttpServer(): Promise<HttpServer> {
   await new Promise<void>((resolve, reject) => {
     httpServer.once('error', reject);
     httpServer.listen(port, host, () => {
-      logger.info(`HTTP streaming server listening on ${host}:${port}`, { s2sEnforced: s2sSecret !== '' });
+      logger.info(`HTTP streaming server listening on ${host}:${port}`, {
+        s2sEnforced: s2sSecret !== '',
+      });
       resolve();
     });
   });

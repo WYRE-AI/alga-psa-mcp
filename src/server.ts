@@ -7,7 +7,7 @@ import { logger } from './utils/logger.js';
 export function createServer(): Server {
   const server = new Server(
     { name: 'alga-psa-mcp', version: '0.1.0' },
-    { capabilities: { tools: {}, logging: {} } }
+    { capabilities: { tools: {}, logging: {} } },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: listTools() }));
@@ -19,7 +19,15 @@ export function createServer(): Server {
       return await dispatchToolCall(name, (args || {}) as Record<string, unknown>);
     } catch {
       logger.error('Tool call failed');
-      return { content: [{ type: 'text' as const, text: 'Alga tool request failed. Try again; if it keeps failing, check the connection settings.' }], isError: true };
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Alga tool request failed. Try again; if it keeps failing, check the connection settings.',
+          },
+        ],
+        isError: true,
+      };
     }
   });
 

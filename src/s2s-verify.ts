@@ -29,7 +29,7 @@ const HEADER_VALUE_RE = /^t=(\d{1,15}),v1=([0-9a-f]{64})$/;
 export function verifyS2sHeader(
   headerValue: string | undefined,
   secret: string,
-  maxSkewSeconds = 300
+  maxSkewSeconds = 300,
 ): boolean {
   if (!secret || !headerValue) return false;
   const match = HEADER_VALUE_RE.exec(headerValue);

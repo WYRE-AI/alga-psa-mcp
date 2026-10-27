@@ -34,12 +34,12 @@ userinfo, query or fragment.
 Set `AUTH_MODE=gateway`. Send these headers on every
 request to `/mcp`:
 
-| Header | Required | Meaning |
-| --- | --- | --- |
-| `X-Alga-Instance-Url` | Yes | The https:// address you use to sign in to Alga, with nothing after the domain (for example https://psa.example.com). Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances must be reachable from the internet over HTTPS with a valid certificate. |
-| `X-Alga-Api-Key` | Yes | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role. |
-| `X-Alga-Tenant-Id` | No | Leave blank. Only set it if Alga support asks you to; a wrong value makes every request fail with 401 |
-| `X-Gateway-S2S` | Yes, except insecure local dev | Timestamped gateway proof |
+| Header                | Required                       | Meaning                                                                                                                                                                                                                                                                     |
+| --------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Alga-Instance-Url` | Yes                            | The https:// address you use to sign in to Alga, with nothing after the domain (for example https://psa.example.com). Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances must be reachable from the internet over HTTPS with a valid certificate. |
+| `X-Alga-Api-Key`      | Yes                            | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role.                                                                                           |
+| `X-Alga-Tenant-Id`    | No                             | Leave blank. Only set it if Alga support asks you to; a wrong value makes every request fail with 401                                                                                                                                                                       |
+| `X-Gateway-S2S`       | Yes, except insecure local dev | Timestamped gateway proof                                                                                                                                                                                                                                                   |
 
 Gateway mode **never falls back to environment credentials**, including the tenant
 ID. Missing required credential headers return HTTP 401 JSON `{error: ...}`;
@@ -64,26 +64,26 @@ Stdio defaults to environment credentials. For standalone HTTP, set
 `AUTH_MODE=env`; HTTP still requires S2S unless insecure development is enabled.
 The server does not automatically load `.env` files.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `ALGA_INSTANCE_URL` | Required in standalone | The https:// address you use to sign in to Alga, with nothing after the domain (for example https://psa.example.com). Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances must be reachable from the internet over HTTPS with a valid certificate. |
-| `ALGA_API_KEY` | Required in standalone | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role. |
-| `ALGA_TENANT_ID` | Unset | Leave blank. Only set it if Alga support asks you to; a wrong value makes every request fail with 401 |
-| `AUTH_MODE` | `env` (Docker: `gateway`) | Credential source |
-| `MCP_TRANSPORT` | `stdio` (Docker: `http`) | Transport when using the HTTP entry point |
-| `MCP_HTTP_PORT` | `8080` | HTTP listener port |
-| `MCP_HTTP_HOST` | `0.0.0.0` with S2S | Bind host; insecure dev forces `127.0.0.1` |
-| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`; logs use stderr |
+| Variable            | Default                   | Purpose                                                                                                                                                                                                                                                                     |
+| ------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ALGA_INSTANCE_URL` | Required in standalone    | The https:// address you use to sign in to Alga, with nothing after the domain (for example https://psa.example.com). Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances must be reachable from the internet over HTTPS with a valid certificate. |
+| `ALGA_API_KEY`      | Required in standalone    | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role.                                                                                           |
+| `ALGA_TENANT_ID`    | Unset                     | Leave blank. Only set it if Alga support asks you to; a wrong value makes every request fail with 401                                                                                                                                                                       |
+| `AUTH_MODE`         | `env` (Docker: `gateway`) | Credential source                                                                                                                                                                                                                                                           |
+| `MCP_TRANSPORT`     | `stdio` (Docker: `http`)  | Transport when using the HTTP entry point                                                                                                                                                                                                                                   |
+| `MCP_HTTP_PORT`     | `8080`                    | HTTP listener port                                                                                                                                                                                                                                                          |
+| `MCP_HTTP_HOST`     | `0.0.0.0` with S2S        | Bind host; insecure dev forces `127.0.0.1`                                                                                                                                                                                                                                  |
+| `LOG_LEVEL`         | `info`                    | `debug`, `info`, `warn`, `error`; logs use stderr                                                                                                                                                                                                                           |
 
 ### Flags
 
-| Variable | Default | Behavior |
-| --- | --- | --- |
-| `ALGA_ENABLE_DESTRUCTIVE` | Off | Only `true` or `1` (case insensitive) enables destructive tools |
-| `READ_ONLY_MODE` | Off | Only `true` or `1` exposes read tools alone; wins over destructive enablement |
-| `ALGA_ALLOW_PRIVATE_INSTANCE` | Off | Exactly `true` allows private/loopback destinations and HTTP; environment only |
-| `CONDUIT_S2S_SECRET` | Unset | Required real secret for HTTP; never sent to Alga |
-| `MCP_ALLOW_INSECURE_DEV` | Off | Exactly `1` permits HTTP without S2S only on loopback; cannot bypass placeholder refusal |
+| Variable                      | Default | Behavior                                                                                 |
+| ----------------------------- | ------- | ---------------------------------------------------------------------------------------- |
+| `ALGA_ENABLE_DESTRUCTIVE`     | Off     | Only `true` or `1` (case insensitive) enables destructive tools                          |
+| `READ_ONLY_MODE`              | Off     | Only `true` or `1` exposes read tools alone; wins over destructive enablement            |
+| `ALGA_ALLOW_PRIVATE_INSTANCE` | Off     | Exactly `true` allows private/loopback destinations and HTTP; environment only           |
+| `CONDUIT_S2S_SECRET`          | Unset   | Required real secret for HTTP; never sent to Alga                                        |
+| `MCP_ALLOW_INSECURE_DEV`      | Off     | Exactly `1` permits HTTP without S2S only on loopback; cannot bypass placeholder refusal |
 
 Disabled tools are absent from `tools/list` and rejected if called by name.
 Read tools carry `readOnlyHint: true, destructiveHint: false`. Write tools carry
@@ -200,89 +200,89 @@ Project task lists and task status mappings are not paginated. `alga_projects_ta
 
 ### Read — 41 tools
 
-| Tool | Returns / key filters |
-| --- | --- |
-| `alga_assets_get` | Get one asset by ID. Use after a list or search to see full details. |
-| `alga_assets_list` | List assets, one page at a time. Use to browse or filter by client, type, status or location; use alga_assets_search to find assets by text. |
-| `alga_assets_search` | Search assets by text and return matches. Use when you have words to find; narrow by client, type or status. |
-| `alga_boards_list` | List ticket boards, optionally filtered by name search, one page at a time. |
-| `alga_clients_contacts_list` | List contacts belonging to one client, one page at a time. Use alga_contacts_list to browse across clients or alga_contacts_search to find a person by name or email. |
-| `alga_clients_get` | Get one client by ID. Use after a list or search to see full details. |
-| `alga_clients_list` | List clients, one page at a time. Use to browse or filter by name search, type or inactive state. |
-| `alga_clients_locations_list` | List locations belonging to a client, one page at a time. |
-| `alga_contacts_get` | Get one contact by ID. Use after a list or search to see full details. |
-| `alga_contacts_list` | List contacts, one page at a time. Use to browse or filter by client or inactive state; use alga_contacts_search to find a person by name or email. |
-| `alga_contacts_search` | Search contacts by name or email and return matches. Optionally limit to one client or include inactive contacts. |
-| `alga_contracts_list` | List contracts, one page at a time. Use to browse or filter by client, status or search. |
-| `alga_invoices_get` | Get one invoice by ID. Use after a list or search to see full details. |
-| `alga_invoices_items_list` | List line items on an invoice, one page at a time. |
-| `alga_invoices_list` | List invoices, one page at a time. Use to browse or filter by client, status or date range. |
-| `alga_kb_articles_get` | Get one knowledge article by ID. Use after a list or search to see full details. |
-| `alga_kb_articles_list` | List knowledge articles, one page at a time. Use to browse or filter by search, category, audience or status. |
-| `alga_priorities_list` | List priorities, one page at a time. Use to browse or filter by priority name search. |
-| `alga_projects_get` | Get one project by ID. Use after a list or search to see full details. |
-| `alga_projects_list` | List projects, one page at a time. Use to browse or filter by client, status or search. |
-| `alga_projects_phases_list` | List phases in a project, one page at a time. |
-| `alga_projects_tasks_get` | Get one project task by ID. Use after a list or search to see full details. |
+| Tool                                      | Returns / key filters                                                                                                                                                                   |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `alga_assets_get`                         | Get one asset by ID. Use after a list or search to see full details.                                                                                                                    |
+| `alga_assets_list`                        | List assets, one page at a time. Use to browse or filter by client, type, status or location; use alga_assets_search to find assets by text.                                            |
+| `alga_assets_search`                      | Search assets by text and return matches. Use when you have words to find; narrow by client, type or status.                                                                            |
+| `alga_boards_list`                        | List ticket boards, optionally filtered by name search, one page at a time.                                                                                                             |
+| `alga_clients_contacts_list`              | List contacts belonging to one client, one page at a time. Use alga_contacts_list to browse across clients or alga_contacts_search to find a person by name or email.                   |
+| `alga_clients_get`                        | Get one client by ID. Use after a list or search to see full details.                                                                                                                   |
+| `alga_clients_list`                       | List clients, one page at a time. Use to browse or filter by name search, type or inactive state.                                                                                       |
+| `alga_clients_locations_list`             | List locations belonging to a client, one page at a time.                                                                                                                               |
+| `alga_contacts_get`                       | Get one contact by ID. Use after a list or search to see full details.                                                                                                                  |
+| `alga_contacts_list`                      | List contacts, one page at a time. Use to browse or filter by client or inactive state; use alga_contacts_search to find a person by name or email.                                     |
+| `alga_contacts_search`                    | Search contacts by name or email and return matches. Optionally limit to one client or include inactive contacts.                                                                       |
+| `alga_contracts_list`                     | List contracts, one page at a time. Use to browse or filter by client, status or search.                                                                                                |
+| `alga_invoices_get`                       | Get one invoice by ID. Use after a list or search to see full details.                                                                                                                  |
+| `alga_invoices_items_list`                | List line items on an invoice, one page at a time.                                                                                                                                      |
+| `alga_invoices_list`                      | List invoices, one page at a time. Use to browse or filter by client, status or date range.                                                                                             |
+| `alga_kb_articles_get`                    | Get one knowledge article by ID. Use after a list or search to see full details.                                                                                                        |
+| `alga_kb_articles_list`                   | List knowledge articles, one page at a time. Use to browse or filter by search, category, audience or status.                                                                           |
+| `alga_priorities_list`                    | List priorities, one page at a time. Use to browse or filter by priority name search.                                                                                                   |
+| `alga_projects_get`                       | Get one project by ID. Use after a list or search to see full details.                                                                                                                  |
+| `alga_projects_list`                      | List projects, one page at a time. Use to browse or filter by client, status or search.                                                                                                 |
+| `alga_projects_phases_list`               | List phases in a project, one page at a time.                                                                                                                                           |
+| `alga_projects_tasks_get`                 | Get one project task by ID. Use after a list or search to see full details.                                                                                                             |
 | `alga_projects_task_status_mappings_list` | List project task status mappings in display order. Pass phase_id to get its effective scope: phase mappings if present, otherwise project mappings. Use these IDs when creating tasks. |
-| `alga_projects_tasks_list` | List all tasks in a project. Pass phase_id to list only one phase; get phase IDs from alga_projects_phases_list. These lists are not paginated. |
-| `alga_schedules_list` | List schedule entries, one page at a time. Use to browse or filter by user, work item or date range. |
-| `alga_search` | Search across record types at once. Use when you don't know the record type; pass the returned nextCursor as cursor to get more results. |
-| `alga_services_list` | List services, one page at a time. Use to browse or filter by name search or category. |
-| `alga_statuses_list` | List statuses, one page at a time. Use to browse or filter by board or status type. |
-| `alga_ticket_categories_list` | List ticket categories, one page at a time. Use to browse or filter by board or parent category. |
-| `alga_tickets_assets_list` | List assets linked to a ticket, one page at a time. |
-| `alga_tickets_comments_list` | List comments on a ticket, one page at a time. Set is_internal to true for internal notes only, or false for client-visible comments only. |
-| `alga_tickets_get_by_external_link` | Get the ticket linked to a record in another system, using that system's name and the record's ID there. |
-| `alga_tickets_get` | Get one ticket by ID. Use after a list or search to see full details. |
-| `alga_tickets_list` | List tickets, one page at a time. Use to browse or filter by client, board, status, priority, assignee, open or closed, dates or external link. |
-| `alga_tickets_search` | Search tickets by text and return matches. Use when you have words from the title or description; add filters to narrow by client, board, status or assignee. |
-| `alga_tickets_time_entries_list` | List time entries linked to a ticket, one page at a time. |
-| `alga_time_entries_get` | Get one time entry by ID. Use after a list or search to see full details. |
-| `alga_time_entries_list` | List time entries, one page at a time. Use to browse or filter by user, work item, dates or billable state. |
-| `alga_time_sheets_list` | List time sheets, one page at a time. Use to browse or filter by user, period or approval state. |
-| `alga_users_get` | Get one user profile by ID. Use after a list or search to see full details. |
-| `alga_users_list` | List users, one page at a time. Use to browse or filter by search or inactive state. |
+| `alga_projects_tasks_list`                | List all tasks in a project. Pass phase_id to list only one phase; get phase IDs from alga_projects_phases_list. These lists are not paginated.                                         |
+| `alga_schedules_list`                     | List schedule entries, one page at a time. Use to browse or filter by user, work item or date range.                                                                                    |
+| `alga_search`                             | Search across record types at once. Use when you don't know the record type; pass the returned nextCursor as cursor to get more results.                                                |
+| `alga_services_list`                      | List services, one page at a time. Use to browse or filter by name search or category.                                                                                                  |
+| `alga_statuses_list`                      | List statuses, one page at a time. Use to browse or filter by board or status type.                                                                                                     |
+| `alga_ticket_categories_list`             | List ticket categories, one page at a time. Use to browse or filter by board or parent category.                                                                                        |
+| `alga_tickets_assets_list`                | List assets linked to a ticket, one page at a time.                                                                                                                                     |
+| `alga_tickets_comments_list`              | List comments on a ticket, one page at a time. Set is_internal to true for internal notes only, or false for client-visible comments only.                                              |
+| `alga_tickets_get_by_external_link`       | Get the ticket linked to a record in another system, using that system's name and the record's ID there.                                                                                |
+| `alga_tickets_get`                        | Get one ticket by ID. Use after a list or search to see full details.                                                                                                                   |
+| `alga_tickets_list`                       | List tickets, one page at a time. Use to browse or filter by client, board, status, priority, assignee, open or closed, dates or external link.                                         |
+| `alga_tickets_search`                     | Search tickets by text and return matches. Use when you have words from the title or description; add filters to narrow by client, board, status or assignee.                           |
+| `alga_tickets_time_entries_list`          | List time entries linked to a ticket, one page at a time.                                                                                                                               |
+| `alga_time_entries_get`                   | Get one time entry by ID. Use after a list or search to see full details.                                                                                                               |
+| `alga_time_entries_list`                  | List time entries, one page at a time. Use to browse or filter by user, work item, dates or billable state.                                                                             |
+| `alga_time_sheets_list`                   | List time sheets, one page at a time. Use to browse or filter by user, period or approval state.                                                                                        |
+| `alga_users_get`                          | Get one user profile by ID. Use after a list or search to see full details.                                                                                                             |
+| `alga_users_list`                         | List users, one page at a time. Use to browse or filter by search or inactive state.                                                                                                    |
 
 ### Write — 18 tools
 
-| Tool | Effect / returned result |
-| --- | --- |
-| `alga_assets_create` | Create and return an asset with a client, type, tag, name and status. |
-| `alga_assets_update` | Update a asset and return it. Pass the asset ID and only the fields you want to change. |
-| `alga_clients_create` | Create and return a client with a name and billing cycle. |
-| `alga_clients_update` | Update a client and return it. Pass the client ID and only the fields you want to change. |
-| `alga_contacts_create` | Create and return a contact with a full name and email. |
-| `alga_contacts_update` | Update a contact and return it. Pass the contact ID and only the fields you want to change. |
-| `alga_kb_articles_create` | Create and return a draft knowledge article; this tool never publishes. |
-| `alga_projects_tasks_create` | Create a task in a project phase and return it. Omit project_status_mapping_id to use the first non-closed status by display_order in the phase’s effective scope, falling back to the first. Get IDs from alga_projects_task_status_mappings_list. |
-| `alga_projects_tasks_update` | Update a task and return it. Pass the task ID and only the fields you want to change. |
-| `alga_schedules_create` | Create and return a schedule entry with start/end times and optional assigned users. |
-| `alga_tickets_checklist_create` | Create a checklist item on a ticket and return it. |
-| `alga_tickets_comments_create` | Create a comment or internal note on a ticket and return it. Set is_internal to true to hide it from the client. |
-| `alga_tickets_create` | Create a ticket and return it. Needs a title plus client, board, status and priority IDs; get them from alga_clients_list, alga_boards_list, alga_statuses_list and alga_priorities_list. |
-| `alga_tickets_update` | Update a ticket and return it. Pass the ticket ID and only the fields you want to change. |
-| `alga_tickets_update_assignment` | Update a ticket's primary assignee and return the ticket. Get user IDs from alga_users_list. |
-| `alga_tickets_update_status` | Update a ticket's status and return the ticket. Get status IDs from alga_statuses_list. |
-| `alga_time_entries_create` | Create a time entry and return it. Needs a service ID, start and end times, and a work item type; pass work_item_id to log the time against a specific ticket or project task. |
-| `alga_time_entries_update` | Update a entry and return it. Pass the entry ID and only the fields you want to change. |
+| Tool                             | Effect / returned result                                                                                                                                                                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `alga_assets_create`             | Create and return an asset with a client, type, tag, name and status.                                                                                                                                                                               |
+| `alga_assets_update`             | Update a asset and return it. Pass the asset ID and only the fields you want to change.                                                                                                                                                             |
+| `alga_clients_create`            | Create and return a client with a name and billing cycle.                                                                                                                                                                                           |
+| `alga_clients_update`            | Update a client and return it. Pass the client ID and only the fields you want to change.                                                                                                                                                           |
+| `alga_contacts_create`           | Create and return a contact with a full name and email.                                                                                                                                                                                             |
+| `alga_contacts_update`           | Update a contact and return it. Pass the contact ID and only the fields you want to change.                                                                                                                                                         |
+| `alga_kb_articles_create`        | Create and return a draft knowledge article; this tool never publishes.                                                                                                                                                                             |
+| `alga_projects_tasks_create`     | Create a task in a project phase and return it. Omit project_status_mapping_id to use the first non-closed status by display_order in the phase’s effective scope, falling back to the first. Get IDs from alga_projects_task_status_mappings_list. |
+| `alga_projects_tasks_update`     | Update a task and return it. Pass the task ID and only the fields you want to change.                                                                                                                                                               |
+| `alga_schedules_create`          | Create and return a schedule entry with start/end times and optional assigned users.                                                                                                                                                                |
+| `alga_tickets_checklist_create`  | Create a checklist item on a ticket and return it.                                                                                                                                                                                                  |
+| `alga_tickets_comments_create`   | Create a comment or internal note on a ticket and return it. Set is_internal to true to hide it from the client.                                                                                                                                    |
+| `alga_tickets_create`            | Create a ticket and return it. Needs a title plus client, board, status and priority IDs; get them from alga_clients_list, alga_boards_list, alga_statuses_list and alga_priorities_list.                                                           |
+| `alga_tickets_update`            | Update a ticket and return it. Pass the ticket ID and only the fields you want to change.                                                                                                                                                           |
+| `alga_tickets_update_assignment` | Update a ticket's primary assignee and return the ticket. Get user IDs from alga_users_list.                                                                                                                                                        |
+| `alga_tickets_update_status`     | Update a ticket's status and return the ticket. Get status IDs from alga_statuses_list.                                                                                                                                                             |
+| `alga_time_entries_create`       | Create a time entry and return it. Needs a service ID, start and end times, and a work item type; pass work_item_id to log the time against a specific ticket or project task.                                                                      |
+| `alga_time_entries_update`       | Update a entry and return it. Pass the entry ID and only the fields you want to change.                                                                                                                                                             |
 
 ### Destructive — 12 tools (off by default)
 
-| Tool | Effect / returned result |
-| --- | --- |
-| `alga_assets_delete` | ⚠ DESTRUCTIVE: Delete an asset permanently. |
-| `alga_clients_delete` | ⚠ DESTRUCTIVE: Delete a client permanently. |
-| `alga_clients_merge` | ⚠ DESTRUCTIVE: Merge another client into this one. Everything on source_client_id (billing profile, contacts, tickets and other records) moves to the client in id, and source_client_id is marked as merged. This can't be undone. |
-| `alga_contacts_delete` | ⚠ DESTRUCTIVE: Delete a contact permanently. |
-| `alga_invoices_finalize` | ⚠ DESTRUCTIVE: Finalize an invoice, committing its billing state; return the result. |
-| `alga_invoices_send` | ⚠ DESTRUCTIVE: Email the invoice to the client; return the delivery result. |
-| `alga_projects_delete` | ⚠ DESTRUCTIVE: Delete a project permanently. |
-| `alga_projects_tasks_delete` | ⚠ DESTRUCTIVE: Delete a project task permanently. |
-| `alga_schedules_delete` | ⚠ DESTRUCTIVE: Delete a schedule entry permanently. |
-| `alga_tickets_delete` | ⚠ DESTRUCTIVE: Delete a ticket permanently. |
-| `alga_time_entries_delete` | ⚠ DESTRUCTIVE: Delete a time entry permanently. |
-| `alga_time_sheets_approve` | ⚠ DESTRUCTIVE: Approve a time sheet for billing or payroll; return the approval result. |
+| Tool                         | Effect / returned result                                                                                                                                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `alga_assets_delete`         | ⚠ DESTRUCTIVE: Delete an asset permanently.                                                                                                                                                                                         |
+| `alga_clients_delete`        | ⚠ DESTRUCTIVE: Delete a client permanently.                                                                                                                                                                                         |
+| `alga_clients_merge`         | ⚠ DESTRUCTIVE: Merge another client into this one. Everything on source_client_id (billing profile, contacts, tickets and other records) moves to the client in id, and source_client_id is marked as merged. This can't be undone. |
+| `alga_contacts_delete`       | ⚠ DESTRUCTIVE: Delete a contact permanently.                                                                                                                                                                                        |
+| `alga_invoices_finalize`     | ⚠ DESTRUCTIVE: Finalize an invoice, committing its billing state; return the result.                                                                                                                                                |
+| `alga_invoices_send`         | ⚠ DESTRUCTIVE: Email the invoice to the client; return the delivery result.                                                                                                                                                         |
+| `alga_projects_delete`       | ⚠ DESTRUCTIVE: Delete a project permanently.                                                                                                                                                                                        |
+| `alga_projects_tasks_delete` | ⚠ DESTRUCTIVE: Delete a project task permanently.                                                                                                                                                                                   |
+| `alga_schedules_delete`      | ⚠ DESTRUCTIVE: Delete a schedule entry permanently.                                                                                                                                                                                 |
+| `alga_tickets_delete`        | ⚠ DESTRUCTIVE: Delete a ticket permanently.                                                                                                                                                                                         |
+| `alga_time_entries_delete`   | ⚠ DESTRUCTIVE: Delete a time entry permanently.                                                                                                                                                                                     |
+| `alga_time_sheets_approve`   | ⚠ DESTRUCTIVE: Approve a time sheet for billing or payroll; return the approval result.                                                                                                                                             |
 
 Knowledge article creation always sends draft status and offers no publish input.
 Invoice sending emails the invoice to the client. Finalization, time-sheet
