@@ -79,7 +79,7 @@ export const clients = [
   ),
   tool(
     'alga_clients_merge',
-    "⚠ DESTRUCTIVE: Merge source_client_id into the client in id. Its contacts, tickets, billing and other records move over and it is marked as merged. This can't be undone. pin_portal_grants (default true) keeps portal users limited to the billing they could see before.",
+    "⚠ DESTRUCTIVE: Merge source_client_id into the client in id. Its contacts, tickets, billing and other records move over and it is marked as merged. This can't be undone. Leave pin_portal_grants on (the default) so portal users keep seeing only the billing they could see before.",
     'POST',
     '/clients/{id}/merge',
     'destructive',

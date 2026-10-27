@@ -31,7 +31,7 @@ export const invoices = [
   ),
   tool(
     'alga_invoices_finalize',
-    '⚠ DESTRUCTIVE: Finalize a draft invoice. Its status becomes sent and its items and payment method lock. It emails no one (use alga_invoices_send). It may also apply client credit, start auto-pay or queue an accounting export. It can be undone only in the Alga app, before export.',
+    "⚠ DESTRUCTIVE: Finalize a draft invoice that has line items. This can charge the client via auto-pay. Marks it sent, locks items and payment method, may apply or issue client credit (deposit or prepayment) and may queue an accounting export. Emails no one. Can't be undone via these tools or the API.",
     'POST',
     '/invoices/{id}/finalize',
     'destructive',
@@ -40,7 +40,7 @@ export const invoices = [
   ),
   tool(
     'alga_invoices_send',
-    '⚠ DESTRUCTIVE: Email an invoice to the addresses you pass. This sends a real email and marks the invoice as sent.',
+    '⚠ DESTRUCTIVE: Email an invoice to the addresses in email_addresses (at least one). This sends a real email and marks the invoice as sent.',
     'POST',
     '/invoices/{id}/send',
     'destructive',
