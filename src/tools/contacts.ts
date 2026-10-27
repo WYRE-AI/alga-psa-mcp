@@ -40,7 +40,7 @@ export const contacts = [
   ),
   tool(
     'alga_contacts_create',
-    'Create and return a contact with a full name and email.',
+    'Create a contact and return it. Needs a full name and email.',
     'POST',
     '/contacts',
     'write',

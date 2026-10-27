@@ -19,7 +19,7 @@
       "environmentVariables": [
         {
           "name": "ALGA_INSTANCE_URL",
-          "description": "The https:// address you use to sign in to Alga, with nothing after the domain (for example https://psa.example.com). Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances must be reachable from the internet over HTTPS with a valid certificate.",
+          "description": "The https:// address you use to sign in to Alga, for example https://psa.example.com. A trailing / or /api/v1 is fine; leave off any other path. Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances must be reachable from the internet over HTTPS with a valid certificate.",
           "isRequired": true,
           "format": "string"
         },
@@ -32,7 +32,7 @@
         },
         {
           "name": "ALGA_TENANT_ID",
-          "description": "Leave blank. Only set it if Alga support asks you to; a wrong value makes every request fail with 401",
+          "description": "Optional. Leave blank unless Alga support asks for it. A wrong value makes every request fail.",
           "isRequired": false,
           "format": "string"
         }

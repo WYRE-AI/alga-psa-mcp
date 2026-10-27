@@ -10,6 +10,7 @@ export interface Field {
   default?: unknown;
   enum?: string[];
   items?: Field;
+  minItems?: number;
   maxItems?: number;
 }
 export interface Definition {

@@ -12,14 +12,6 @@ routeTests([
   ['alga_projects_tasks_list', 'GET', '/projects/p1/tasks', { project_id: 'p1' }, {}],
   ['alga_projects_tasks_get', 'GET', '/projects/tasks/t1', { task_id: 't1' }],
   [
-    'alga_projects_tasks_create',
-    'POST',
-    '/projects/p1/phases/h1/tasks',
-    { project_id: 'p1', phase_id: 'h1', task_name: 'Install', project_status_mapping_id: 's1' },
-    {},
-    { task_name: 'Install', project_status_mapping_id: 's1' },
-  ],
-  [
     'alga_projects_tasks_update',
     'PUT',
     '/projects/tasks/t1',

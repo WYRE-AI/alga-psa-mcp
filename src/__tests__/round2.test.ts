@@ -52,21 +52,20 @@ it.each([400, 401, 403, 404, 409, 422, 429, 500, 503, 302])(
     expect(apiFailure(status).message).toMatch(/Check|Ask|Get|Wait|Try/);
   },
 );
-it.each([502, 503, 504])('says the change is unconfirmed for HTTP %s on writes', (status) => {
+it.each([500, 502, 503, 504])('says the change is unconfirmed for HTTP %s on writes', (status) => {
   for (const method of ['POST', 'PUT', 'DELETE']) {
     expect(apiFailure(status, method).message).toBe(
       `Alga did not confirm the change (HTTP ${status}). It may already have been saved; check in Alga before retrying.`,
     );
   }
 });
-it.each([502, 503, 504])('keeps the server-problem message for HTTP %s on reads', (status) => {
+it.each([500, 502, 503, 504])('keeps the server-problem message for HTTP %s on reads', (status) => {
   expect(apiFailure(status).message).toBe(
     `Alga is having a server problem. Try again shortly; if it keeps failing, contact Alga support. (HTTP ${status}).`,
   );
   expect(apiFailure(status, 'GET').message).toBe(apiFailure(status).message);
 });
 it('keeps other write failure messages unchanged', () => {
-  expect(apiFailure(500, 'POST').message).toBe(apiFailure(500).message);
   expect(apiFailure(404, 'DELETE').message).toBe(apiFailure(404).message);
 });
 it('reports an unconfirmed change when a POST gets HTTP 503', async () => {
@@ -119,7 +118,7 @@ it('stops task creation when the effective scope is empty', async () => {
       { project_id: 'project', phase_id: 'phase', task_name: 'Task' },
       creds,
     ),
-  ).rejects.toThrow('Configure task statuses in Alga');
+  ).rejects.toThrow('Add task statuses to the project in Alga');
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 it('filters mapping lookup to the effective phase scope without forwarding phase_id', async () => {
@@ -155,7 +154,7 @@ it('requires a work item ID for ticket time entries', async () => {
       { work_item_type: 'ticket', service_id: 's', start_time: 'start', end_time: 'end' },
       creds,
     ),
-  ).rejects.toThrow('Get the work item ID');
+  ).rejects.toThrow('work_item_id is required when work_item_type is ticket or project_task');
   expect(fetch).not.toHaveBeenCalled();
 });
 
@@ -171,4 +170,72 @@ it('lists phases without pagination and preserves the data-only response', async
     creds.instanceUrl + '/api/v1/projects/project/phases',
   );
   expect(JSON.parse(result)).toEqual(response);
+});
+
+const statusTask = { data: { project_id: 'p1', phase_id: 'h1' } };
+const statuses = {
+  data: [mapping('mine', 'h1', 0), mapping('other-project', 'h9', 1)],
+};
+const methodsSent = () => vi.mocked(fetch).mock.calls.map((c) => c[1]?.method);
+const foreign = 'That status belongs to a different project or phase.';
+it('rejects a task update with another project’s status and sends no PUT', async () => {
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(json(statusTask) as never)
+    .mockResolvedValueOnce(json(statuses) as never);
+  await expect(
+    executeTool(
+      tool('alga_projects_tasks_update'),
+      { task_id: 't1', project_status_mapping_id: 'other-project' },
+      creds,
+    ),
+  ).rejects.toThrow(foreign);
+  expect(methodsSent()).toEqual(['GET', 'GET']);
+  expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain('/projects/p1/task-status-mappings');
+});
+it('accepts a task update with a status valid for the task’s phase', async () => {
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(json(statusTask) as never)
+    .mockResolvedValueOnce(json(statuses) as never)
+    .mockResolvedValueOnce(json({ data: {} }) as never);
+  await executeTool(
+    tool('alga_projects_tasks_update'),
+    { task_id: 't1', project_status_mapping_id: 'mine' },
+    creds,
+  );
+  expect(methodsSent()).toEqual(['GET', 'GET', 'PUT']);
+  expect(JSON.parse(String(vi.mocked(fetch).mock.calls[2][1]?.body))).toEqual({
+    project_status_mapping_id: 'mine',
+  });
+});
+it('rejects task creation with an explicit foreign status and sends no POST', async () => {
+  vi.mocked(fetch).mockResolvedValueOnce(json(statuses) as never);
+  await expect(
+    executeTool(
+      tool('alga_projects_tasks_create'),
+      {
+        project_id: 'p1',
+        phase_id: 'h1',
+        task_name: 'T',
+        project_status_mapping_id: 'other-project',
+      },
+      creds,
+    ),
+  ).rejects.toThrow(foreign);
+  expect(methodsSent()).toEqual(['GET']);
+});
+it('creates a task with an explicit status that belongs to the phase', async () => {
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(json(statuses) as never)
+    .mockResolvedValueOnce(json({ data: {} }) as never);
+  await executeTool(
+    tool('alga_projects_tasks_create'),
+    { project_id: 'p1', phase_id: 'h1', task_name: 'T', project_status_mapping_id: 'mine' },
+    creds,
+  );
+  expect(methodsSent()).toEqual(['GET', 'POST']);
+});
+it('makes no extra requests when a task update has no status', async () => {
+  vi.mocked(fetch).mockResolvedValueOnce(json({ data: {} }) as never);
+  await executeTool(tool('alga_projects_tasks_update'), { task_id: 't1', task_name: 'N' }, creds);
+  expect(methodsSent()).toEqual(['PUT']);
 });

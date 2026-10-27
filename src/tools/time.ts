@@ -55,7 +55,7 @@ export const time = [
   ),
   tool(
     'alga_time_entries_create',
-    'Create a time entry and return it. Needs a service ID, start and end times, and a work item type; pass work_item_id to log the time against a specific ticket or project task.',
+    'Create a time entry and return it. Needs a service ID, start and end times, and a work item type. If the work item type is ticket or project_task, also pass work_item_id for that ticket or task.',
     'POST',
     '/time-entries',
     'write',
@@ -64,7 +64,7 @@ export const time = [
   ),
   tool(
     'alga_time_entries_update',
-    'Update a entry and return it. Pass the entry ID and only the fields you want to change.',
+    'Update a time entry and return it. Pass the time entry ID and only the fields you want to change.',
     'PUT',
     '/time-entries/{id}',
     'write',
@@ -82,7 +82,7 @@ export const time = [
   ),
   tool(
     'alga_time_sheets_approve',
-    '⚠ DESTRUCTIVE: Approve a time sheet for billing or payroll; return the approval result.',
+    '⚠ DESTRUCTIVE: Approve a time sheet for billing or payroll.',
     'POST',
     '/time-sheets/{id}/approve',
     'destructive',

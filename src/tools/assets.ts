@@ -45,7 +45,7 @@ export const assets = [
   ),
   tool(
     'alga_assets_create',
-    'Create and return an asset with a client, type, tag, name and status.',
+    'Create an asset and return it. Needs a client, type, asset tag, name and status.',
     'POST',
     '/assets',
     'write',

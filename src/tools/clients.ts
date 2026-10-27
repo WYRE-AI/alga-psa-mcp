@@ -52,7 +52,7 @@ export const clients = [
   ),
   tool(
     'alga_clients_create',
-    'Create and return a client with a name and billing cycle.',
+    'Create a client and return it. Needs a name and billing cycle.',
     'POST',
     '/clients',
     'write',
@@ -79,7 +79,7 @@ export const clients = [
   ),
   tool(
     'alga_clients_merge',
-    "⚠ DESTRUCTIVE: Merge another client into this one. Everything on source_client_id (billing profile, contacts, tickets and other records) moves to the client in id, and source_client_id is marked as merged. This can't be undone.",
+    "⚠ DESTRUCTIVE: Merge source_client_id into the client in id. Its contacts, tickets, billing and other records move over and it is marked as merged. This can't be undone. pin_portal_grants (default true) keeps portal users limited to the billing they could see before.",
     'POST',
     '/clients/{id}/merge',
     'destructive',

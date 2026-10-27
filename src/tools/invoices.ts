@@ -1,4 +1,4 @@
-import { tool, id, str } from './shared.js';
+import { tool, id, str, text, bool } from './shared.js';
 export const invoices = [
   tool(
     'alga_invoices_list',
@@ -31,7 +31,7 @@ export const invoices = [
   ),
   tool(
     'alga_invoices_finalize',
-    '⚠ DESTRUCTIVE: Finalize an invoice, committing its billing state; return the result.',
+    '⚠ DESTRUCTIVE: Finalize a draft invoice. Its status becomes sent and its items and payment method lock. It emails no one (use alga_invoices_send). It may also apply client credit, start auto-pay or queue an accounting export. It can be undone only in the Alga app, before export.',
     'POST',
     '/invoices/{id}/finalize',
     'destructive',
@@ -40,11 +40,22 @@ export const invoices = [
   ),
   tool(
     'alga_invoices_send',
-    '⚠ DESTRUCTIVE: Email the invoice to the client; return the delivery result.',
+    '⚠ DESTRUCTIVE: Email an invoice to the addresses you pass. This sends a real email and marks the invoice as sent.',
     'POST',
     '/invoices/{id}/send',
     'destructive',
-    { id },
-    ['id'],
+    {
+      id,
+      email_addresses: {
+        type: 'array',
+        items: { ...str, minLength: 1 },
+        minItems: 1,
+        maxItems: 50,
+      },
+      subject: str,
+      message: text,
+      include_pdf: bool,
+    },
+    ['id', 'email_addresses'],
   ),
 ];

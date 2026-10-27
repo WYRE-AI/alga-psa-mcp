@@ -12,7 +12,7 @@ export const schedules = [
   ),
   tool(
     'alga_schedules_create',
-    'Create and return a schedule entry with start/end times and optional assigned users.',
+    'Create a schedule entry and return it. Needs a title and start and end times; optionally assign users.',
     'POST',
     '/schedules',
     'write',

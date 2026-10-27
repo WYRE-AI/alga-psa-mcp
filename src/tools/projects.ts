@@ -15,7 +15,7 @@ const taskFields = {
 export const projects = [
   tool(
     'alga_projects_task_status_mappings_list',
-    'List project task status mappings in display order. Pass phase_id to get its effective scope: phase mappings if present, otherwise project mappings. Use these IDs when creating tasks.',
+    "List the task statuses a project uses, in the order Alga shows them, with the ID to pass as project_status_mapping_id when you create or update a task. Pass phase_id to get the statuses for one phase; if that phase has no statuses of its own, you get the project's.",
     'GET',
     '/projects/{project_id}/task-status-mappings',
     'read',
@@ -70,7 +70,7 @@ export const projects = [
   ),
   tool(
     'alga_projects_tasks_create',
-    'Create a task in a project phase and return it. Omit project_status_mapping_id to use the first non-closed status by display_order in the phase’s effective scope, falling back to the first. Get IDs from alga_projects_task_status_mappings_list.',
+    'Create a task in a project phase and return it. Needs the project ID, phase ID and a task name. To pick a status, pass project_status_mapping_id from alga_projects_task_status_mappings_list; if you leave it out, the task gets the first open status for that phase.',
     'POST',
     '/projects/{project_id}/phases/{phase_id}/tasks',
     'write',

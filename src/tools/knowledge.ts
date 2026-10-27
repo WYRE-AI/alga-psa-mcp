@@ -21,7 +21,7 @@ export const knowledge = [
   ),
   tool(
     'alga_kb_articles_create',
-    'Create and return a draft knowledge article; this tool never publishes.',
+    'Create a draft knowledge article and return it. This tool never publishes.',
     'POST',
     '/kb-articles',
     'write',
