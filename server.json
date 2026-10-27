@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.WYRE-AI/alga-psa-mcp",
+  "title": "Alga PSA",
+  "description": "Curated MCP server with 70 Alga PSA tools and request-scoped gateway credentials.",
+  "version": "0.1.0",
+  "repository": { "url": "https://github.com/WYRE-AI/alga-psa-mcp", "source": "github" },
+  "packages": [{
+    "registryType": "npm",
+    "identifier": "@wyre-ai/alga-psa-mcp",
+    "version": "0.1.0",
+    "transport": { "type": "stdio" },
+    "environmentVariables": [
+      { "name": "ALGA_INSTANCE_URL", "description": "HTTPS origin of your Alga instance.", "isRequired": true, "format": "string" },
+      { "name": "ALGA_API_KEY", "description": "Service user's API key.", "isRequired": true, "isSecret": true, "format": "string" },
+      { "name": "ALGA_TENANT_ID", "description": "Optional tenant identifier.", "isRequired": false, "format": "string" }
+    ]
+  }]
+}
