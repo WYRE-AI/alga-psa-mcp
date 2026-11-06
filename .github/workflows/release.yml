@@ -1,0 +1,18 @@
+# Release is intentionally manual-only until Aaron approves the first publish (phase-1 draft).
+name: Release
+on:
+  workflow_dispatch:
+jobs:
+  release:
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      packages: write
+      id-token: write
+      security-events: write
+    uses: WYRE-AI/reusable-workflows/.github/workflows/mcp-server-release.yml@2b0b056bd7544937e5cbd56cf2e1ff8a180a411f
+    with:
+      server-name: alga-psa-mcp
+      image-name: ghcr.io/wyre-ai/alga-psa-mcp
+    secrets: inherit

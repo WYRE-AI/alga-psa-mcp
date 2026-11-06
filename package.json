@@ -1,0 +1,46 @@
+{
+  "name": "@wyre-ai/alga-psa-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Alga PSA with 71 curated tools (41 read, 18 write, 12 destructive)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "alga-psa-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "server.json",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WYRE-AI/alga-psa-mcp"
+  },
+  "author": "WYRE AI",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "node dist/index.js",
+    "start:http": "MCP_TRANSPORT=http node dist/http.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "ipaddr.js": "^2.3.0",
+    "undici": "^6.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.9.10",
+    "tsup": "^8.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.12"
+  }
+}
