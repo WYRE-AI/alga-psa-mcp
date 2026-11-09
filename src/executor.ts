@@ -60,7 +60,7 @@ export function renderResponse(value: unknown, secrets: string[] = []): string {
   if (bytes <= MAX_RESPONSE_BYTES) return text;
   return (
     Buffer.from(text).subarray(0, MAX_RESPONSE_BYTES).toString('utf8').replace(/�$/, '') +
-    '\n[TRUNCATED: use fields, narrower filters or a smaller limit.]'
+    '\n[TRUNCATED: use narrower filters or a smaller limit.]'
   );
 }
 export async function executeTool(
@@ -92,6 +92,9 @@ export async function executeTool(
     ...values,
   };
   if (tool.name === 'alga_search' && query.limit === undefined) query.limit = 25;
+  // CategoryService pages by offset and never reads page; page still sets the reply's pagination.
+  if (tool.name === 'alga_ticket_categories_list')
+    query.offset = (Number(query.page) - 1) * Number(query.limit);
   const result = await requestAlga(creds, path, query, { signal });
   const output =
     tool.name === 'alga_projects_task_status_mappings_list' && args.phase_id

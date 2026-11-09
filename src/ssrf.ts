@@ -30,11 +30,18 @@ export function warnPrivateOverride(): void {
   }
 }
 
+/** Special-use and internal names (RFC 6761, RFC 8375), refused before any DNS lookup. */
+const RESERVED_NAME =
+  /^(localhost|internal|local|test|invalid|example)$|\.(localhost|internal|local|test|invalid|example|home\.arpa)$/;
+/** Public unicast but never a tenant's Alga: the Azure platform (wireserver) address. */
+const PLATFORM_ADDRESSES = new Set(['168.63.129.16']);
+
 /** Only public unicast destinations qualify; transition mechanisms must not hide private IPv4. */
 export function isDisallowedAddress(address: string): boolean {
   try {
     const ip = ipaddr.parse(address);
-    if (ip.kind() === 'ipv4') return ip.range() !== 'unicast';
+    if (ip.kind() === 'ipv4')
+      return ip.range() !== 'unicast' || PLATFORM_ADDRESSES.has(ip.toString());
     const bytes = ip.toByteArray();
     // IPv4-compatible and mapped forms are rejected, regardless of their embedded address.
     if (
@@ -80,8 +87,7 @@ export function parseInstanceUrl(value: string, allowPrivate = privateInstancesA
     const normalized = hostname.toLowerCase().replace(/\.$/, '');
     if (
       !allowPrivate &&
-      (/^(localhost|internal|local)$|\.(localhost|internal|local)$/.test(normalized) ||
-        (isIP(hostname) !== 0 && isDisallowedAddress(hostname)))
+      (RESERVED_NAME.test(normalized) || (isIP(hostname) !== 0 && isDisallowedAddress(hostname)))
     )
       throw new InstanceUrlError();
     return new URL(url.origin);

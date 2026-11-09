@@ -5,11 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch:
 
 # Thin caller for the canonical reusable release pipeline (build ->
-# semantic-release -> Docker -> MCP Registry -> security). On pull_request and
-# workflow_dispatch only its unconditional verify job runs; a push to main
+# semantic-release -> Docker -> MCP Registry -> security). On pull_request
+# only its unconditional verify job runs; a push to main
 # releases, pushes ghcr.io/wyre-ai/alga-psa-mcp and gates it on Trivy, so the
 # Conduit catalog never has to pin a hand-built image.
 

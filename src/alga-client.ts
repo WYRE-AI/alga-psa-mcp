@@ -58,7 +58,7 @@ export function apiFailure(status: number, info: VendorErrorInfo = {}): AlgaApiE
           : AlgaApiError;
   return new Kind(message + diagnostics, status, info.code, info.requestId);
 }
-/** Longest single wait between retries; a longer Retry-After is not worth holding a call for. */
+/** Longest single wait between retries; a longer Retry-After fails the call at once. */
 export const MAX_RETRY_WAIT_MS = 5_000;
 /** Wall time for one tool call, across every attempt and wait. */
 export const REQUEST_DEADLINE_MS = 30_000;
@@ -66,19 +66,17 @@ export function retryAfterMs(value: string | null, attempt = 0, now = Date.now()
   let ms = 1000 * 2 ** attempt;
   if (value && /^\d+(\.\d+)?$/.test(value.trim())) ms = Number(value) * 1000;
   else if (value && Number.isFinite(Date.parse(value))) ms = Math.max(0, Date.parse(value) - now);
-  return Math.min(MAX_RETRY_WAIT_MS, Math.max(0, ms));
+  return Math.max(0, ms);
 }
-/** Page is passed through as given (Alga has no page maximum); it is only floored at 1. */
-export const clampPage = (value: unknown) =>
-  Math.max(1, typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : 1);
-/** Alga caps limit at 100 (ApiBaseController.list). */
-export const clampLimit = (value: unknown) =>
-  Math.min(
-    100,
-    Math.max(1, typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : 25),
-  );
-/** Largest upstream body we will buffer; the 100 KB output cap only applies afterwards. */
-export const MAX_UPSTREAM_RESPONSE_BYTES = 4 * 1024 * 1024;
+/**
+ * Largest upstream body we will buffer. It is parsed and re-serialized before the
+ * 100 KB output cap applies, so one call can cost many times this in heap;
+ * MAX_CONCURRENT_ALGA_REQUESTS bounds the total.
+ */
+export const MAX_UPSTREAM_RESPONSE_BYTES = 1024 * 1024;
+/** Alga calls one process runs at once; further calls fail fast with a retryable error. */
+export const MAX_CONCURRENT_ALGA_REQUESTS = 16;
+let inFlight = 0;
 /** Error bodies are read only for their code, so a much smaller bound applies. */
 const MAX_ERROR_BODY_BYTES = 64 * 1024;
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
@@ -112,10 +110,8 @@ export function buildAlgaUrl(base: URL, path: string, query: Record<string, Quer
       throw new AlgaApiError(
         `Invalid value for ${key}: Alga accepts one value per query parameter.`,
       );
-    url.searchParams.set(
-      key,
-      String(key === 'page' ? clampPage(value) : key === 'limit' ? clampLimit(value) : value),
-    );
+    // Bounds such as limit come from each tool's own schema (executor.validateArgs).
+    url.searchParams.set(key, String(value));
   }
   return url;
 }
@@ -140,6 +136,24 @@ export async function requestAlga(
   path: string,
   query: Record<string, QueryValue> = {},
   options: ClientOptions = {},
+): Promise<unknown> {
+  if (inFlight >= MAX_CONCURRENT_ALGA_REQUESTS)
+    throw new AlgaApiError(
+      'This server is handling too many Alga requests right now. Try again in a few seconds.',
+    );
+  inFlight++;
+  try {
+    return await sendGet(creds, path, query, options);
+  } finally {
+    inFlight--;
+  }
+}
+
+async function sendGet(
+  creds: AlgaCredentials,
+  path: string,
+  query: Record<string, QueryValue>,
+  options: ClientOptions,
 ): Promise<unknown> {
   const tenantId = validateTenantId(creds.tenantId);
   const base = await validateInstanceUrl(creds.instanceUrl);
@@ -166,6 +180,7 @@ export async function requestAlga(
       if (
         [429, 502, 503, 504].includes(response.status) &&
         attempt < 3 &&
+        wait <= MAX_RETRY_WAIT_MS &&
         Date.now() + wait < deadline
       ) {
         await response.body?.cancel();
@@ -221,7 +236,7 @@ async function readCapped(
 ): Promise<string> {
   const tooLarge = () =>
     new AlgaApiError(
-      'Alga sent a response larger than 4 MiB, so it was not read. Narrow the request with filters, fields or a smaller limit and try again.',
+      'Alga sent a response larger than 1 MiB, so it was not read. Narrow the request with filters or a smaller limit and try again.',
     );
   const declared = Number(response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > cap) {

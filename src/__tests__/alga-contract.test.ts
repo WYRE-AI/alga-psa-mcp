@@ -1,7 +1,17 @@
 // Alga's own query contract, vendored by hand from Nine-Minds/alga-psa
-// (server/src/lib/api/schemas/*.ts and the controllers that parse each route).
-// Each tool is driven through the real executor with every argument set, and
-// the query keys that reach the wire must be ones that route actually reads.
+// (server/src/lib/api/schemas/*.ts, the controllers that parse each route, and
+// the service method each controller calls). Each tool is driven through the
+// real executor with every argument set, and the query keys that reach the wire
+// must be ones that route actually reads.
+//
+// A schema accepting a key is not enough: `fields` passes every list schema but
+// only TicketService.list reads it (BaseService.list and the other services
+// ignore it), and the ticket-category schema accepts page/sort/order while
+// CategoryService.listTicketCategories pages by limit+offset and sorts by
+// sort_by/sort_order. So each contract also says how the service pages, and
+// sort enums are the columns each service can actually order by.
+// Checked against alga-psa main @ 41626b1e (2026-11-09).
+//
 // Mocked-fetch route tests only prove we send what we meant to send; this file
 // pins what we meant to Alga. When a tool gains a parameter, add it here only
 // after checking the Alga source cited next to the route.
@@ -13,10 +23,13 @@ import { ALL_TOOLS } from '../tools/index.js';
 import type { Field } from '../tools/shared.js';
 import { json, KEY } from './helpers.js';
 
-/** Query keys ApiBaseController.list reads besides the route's querySchema. */
-const BASE_LIST = ['page', 'limit', 'sort', 'order', 'fields'];
+/**
+ * Query keys ApiBaseController.list reads besides the route's querySchema. It
+ * also forwards `fields`, but only TicketService.list reads that.
+ */
+const BASE_LIST = ['page', 'limit', 'sort', 'order'];
 /** schemas/common.ts paginationQuerySchema without `fields` (routes with their own list()). */
-const PAGE_SORT = ['page', 'limit', 'sort', 'order'];
+const PAGE_SORT = BASE_LIST;
 /** schemas/common.ts baseFilterSchema. */
 const BASE_FILTER = [
   'search',
@@ -30,19 +43,29 @@ const BASE_FILTER = [
 interface RouteContract {
   path: string;
   paginated: boolean;
+  /** How the service pages: by page (the default when paginated) or by limit+offset. */
+  paging?: 'offset';
   keys: string[];
-  /** Alga enums: every value a tool offers must be one Alga accepts. */
+  /** Alga enums and sort allowlists: every value a tool offers must be one Alga accepts. */
   enums?: Record<string, string[]>;
 }
 
 const APPROVAL = ['DRAFT', 'SUBMITTED', 'APPROVED', 'CHANGES_REQUESTED'];
 const ROUTES: Record<string, RouteContract> = {
-  // ticket.ts ticketListQuerySchema; ApiTicketController.list reads fields too.
+  // ticket.ts ticketListQuerySchema; TicketService.list reads fields against
+  // TICKET_LIST_FIELD_ALLOWLIST and sort against TICKET_LIST_API_SORT_SQL.
   alga_tickets_list: {
     path: '/tickets',
     paginated: true,
+    enums: {
+      sort: [
+        ...['ticket_number', 'title', 'entered_at', 'updated_at', 'closed_at', 'due_date'],
+        ...['client_name', 'status_name', 'priority_name', 'latest_activity_at'],
+      ],
+    },
     keys: [
       ...BASE_LIST,
+      'fields',
       ...BASE_FILTER,
       ...['title', 'ticket_number', 'board_id', 'client_id', 'location_id', 'contact_name_id'],
       ...['status_id', 'status_ids', 'category_id', 'subcategory_id', 'entered_by', 'assigned_to'],
@@ -89,7 +112,11 @@ const ROUTES: Record<string, RouteContract> = {
       ...['account_manager_id', 'region_code', 'credit_balance_min', 'credit_balance_max'],
       ...['has_credit_limit', 'industry', 'company_size'],
     ],
-    enums: { client_type: ['company', 'individual'] },
+    // ClientService.list: orderBy(`c.${sort}`), no allowlist.
+    enums: {
+      client_type: ['company', 'individual'],
+      sort: ['client_name', 'created_at', 'updated_at'],
+    },
   },
   alga_clients_get: { path: '/clients/t1', paginated: false, keys: [] },
   // ApiClientController.getLocations: createSuccessResponse, no query.
@@ -115,6 +142,10 @@ const ROUTES: Record<string, RouteContract> = {
       ...['full_name', 'email', 'phone_number', 'client_id', 'role', 'is_inactive', 'has_client'],
       ...['client_name', 'location_id', 'work_arrangement'],
     ],
+    // ContactService.list: client_name/phone_number mapped, else orderBy(`c.${sort}`).
+    enums: {
+      sort: ['full_name', 'email', 'client_name', 'phone_number', 'created_at', 'updated_at'],
+    },
   },
   alga_contacts_get: { path: '/contacts/t1', paginated: false, keys: [] },
   // contact.ts contactSearchSchema: unpaginated; fields picks columns to match.
@@ -140,6 +171,8 @@ const ROUTES: Record<string, RouteContract> = {
         'co_managed',
       ],
       approval_status: APPROVAL,
+      // TimeEntryService.list: orderBy(`time_entries.${sort}`), no allowlist.
+      sort: ['start_time', 'end_time', 'billable_duration', 'created_at', 'updated_at'],
     },
   },
   alga_time_entries_get: { path: '/time-entries/t1', paginated: false, keys: [] },
@@ -174,6 +207,8 @@ const ROUTES: Record<string, RouteContract> = {
       ...['client_id', 'status', 'assigned_to', 'contact_name_id', 'start_date_from'],
       ...['start_date_to', 'end_date_from', 'end_date_to'],
     ],
+    // ProjectService.list: orderBy(`projects.${sort}`), no allowlist.
+    enums: { sort: ['project_name', 'start_date', 'end_date', 'created_at', 'updated_at'] },
   },
   alga_projects_get: { path: '/projects/t1', paginated: false, keys: [] },
   alga_projects_phases_list: { path: '/projects/t1/phases', paginated: false, keys: [] },
@@ -181,9 +216,12 @@ const ROUTES: Record<string, RouteContract> = {
   alga_projects_tasks_list: { path: '/projects/t1/phases/t1/tasks', paginated: false, keys: [] },
   alga_projects_tasks_get: { path: '/projects/tasks/t1', paginated: false, keys: [] },
   // asset.ts assetListQuerySchema via ApiAssetController.list (no fields).
+  // AssetService.list orders by an unqualified sort over a query joined to
+  // clients, so no sort column is offered; order applies to its created_at default.
   alga_assets_list: {
     path: '/assets',
     paginated: true,
+    enums: { sort: [] },
     keys: [
       ...PAGE_SORT,
       ...BASE_FILTER,
@@ -216,6 +254,11 @@ const ROUTES: Record<string, RouteContract> = {
         ...['draft', 'sent', 'paid', 'overdue', 'cancelled', 'pending', 'prepayment'],
         'partially_applied',
       ],
+      // InvoiceService.list: orderBy(`invoices.${sort}`), no allowlist.
+      sort: [
+        ...['invoice_date', 'due_date', 'invoice_number', 'total_amount', 'created_at'],
+        'updated_at',
+      ],
     },
   },
   alga_invoices_get: { path: '/invoices/t1', paginated: false, keys: [] },
@@ -232,6 +275,10 @@ const ROUTES: Record<string, RouteContract> = {
       ...['role_name', 'team_id', 'contact_id', 'is_inactive', 'two_factor_enabled'],
       'is_google_user',
     ],
+    // UserService.list -> BaseService.applySorting: an unqualified orderBy on the
+    // users table, which also holds hashed_password, so sort must stay an allowlist.
+    // The projection is USER_RESPONSE_COLUMNS; fields is never read.
+    enums: { sort: ['username', 'first_name', 'last_name', 'email', 'created_at', 'updated_at'] },
   },
   alga_users_get: { path: '/users/t1', paginated: false, keys: [] },
   // teamSchemas.ts teamFilterSchema.
@@ -244,32 +291,54 @@ const ROUTES: Record<string, RouteContract> = {
       ...['team_name', 'description', 'manager_id', 'member_count_min', 'member_count_max'],
       ...['has_manager', 'project_id', 'location'],
     ],
+    // TeamService.list allowedSortFields.
+    enums: {
+      sort: [
+        ...['team_id', 'team_name', 'manager_id', 'created_at', 'updated_at', 'manager_name'],
+        'member_count',
+      ],
+    },
   },
   // board.ts boardListQuerySchema.
   alga_boards_list: {
     path: '/boards',
     paginated: true,
     keys: [...BASE_LIST, 'include_inactive', 'search'],
+    // BoardService.list validSortFields.
+    enums: { sort: ['display_order', 'board_name', 'is_inactive', 'is_default'] },
   },
   // status.ts statusListQuerySchema: `type`, and board_id is required when type=ticket.
   alga_statuses_list: {
     path: '/statuses',
     paginated: true,
     keys: [...BASE_LIST, 'type', 'search', 'board_id'],
-    enums: { type: ['ticket', 'project', 'project_task', 'interaction'] },
+    // StatusService.list: orderBy(sort) on statuses, no allowlist.
+    enums: {
+      type: ['ticket', 'project', 'project_task', 'interaction'],
+      sort: ['name', 'order_number'],
+    },
   },
-  // priority.ts priorityListQuerySchema.
-  alga_priorities_list: { path: '/priorities', paginated: true, keys: [...BASE_LIST, 'search'] },
-  // categorySchemas.ts ticketCategoryListQuerySchema via listTicketCategories (no fields).
+  // priority.ts priorityListQuerySchema; PriorityService.list: orderBy(sort), no allowlist.
+  alga_priorities_list: {
+    path: '/priorities',
+    paginated: true,
+    keys: [...BASE_LIST, 'search'],
+    enums: { sort: ['priority_name', 'order_number'] },
+  },
+  // ApiCategoryController.listTicketCategories reads page and limit only for the
+  // reply's pagination block; CategoryService.listTicketCategories (288-353) reads
+  // board_id, search, parent_category, created_from/_to, limit, offset, sort_by,
+  // sort_order and include_hierarchy. It never reads page, sort or order.
   alga_ticket_categories_list: {
     path: '/categories/ticket',
     paginated: true,
+    paging: 'offset',
     keys: [
-      ...PAGE_SORT,
-      ...BASE_FILTER,
-      ...['category_name', 'board_id', 'parent_category', 'is_parent', 'is_child', 'depth'],
-      ...['active', 'offset', 'sort_by', 'sort_order', 'include_hierarchy', 'category_type'],
+      ...['page', 'limit', 'offset', 'sort_by', 'sort_order', 'board_id', 'parent_category'],
+      ...['search', 'created_from', 'created_to', 'include_hierarchy'],
     ],
+    // `categories` has created_at but no updated_at (CategoryService comment).
+    enums: { sort_by: ['category_name', 'created_at'], sort_order: ['asc', 'desc'] },
   },
   // serviceSchemas.ts serviceListQuerySchema (sort is an enum).
   alga_services_list: {
@@ -282,7 +351,8 @@ const ROUTES: Record<string, RouteContract> = {
     ],
     enums: { sort: ['service_name', 'billing_method', 'default_rate'] },
   },
-  // contractLineSchemas.ts contractListQuerySchema via listContracts: no client_id or status.
+  // contractLineSchemas.ts contractListQuerySchema via ContractLineService.listContracts:
+  // no client_id or status; client-owned headers only, templates excluded.
   alga_contracts_list: {
     path: '/contracts',
     paginated: true,
@@ -291,6 +361,10 @@ const ROUTES: Record<string, RouteContract> = {
       ...BASE_FILTER,
       ...['contract_name', 'is_active', 'has_plans', 'clients_count_min', 'clients_count_max'],
     ],
+    // listContracts sortColumns.
+    enums: {
+      sort: ['contract_name', 'billing_frequency', 'is_active', 'created_at', 'updated_at'],
+    },
   },
   // ApiSearchController searchApiQuerySchema.
   alga_search: {
@@ -314,6 +388,11 @@ const ROUTES: Record<string, RouteContract> = {
       status: ['draft', 'review', 'published', 'archived'],
       audience: ['internal', 'client', 'public'],
       article_type: ['how_to', 'faq', 'troubleshooting', 'reference'],
+      // KbArticleService.list: orderBy(`ka.${sort}`) over KB_ARTICLE_SELECT_COLUMNS.
+      sort: [
+        ...['created_at', 'updated_at', 'published_at', 'last_reviewed_at', 'next_review_due'],
+        'view_count',
+      ],
     },
   },
   alga_kb_articles_get: { path: '/kb-articles/t1', paginated: false, keys: [] },
@@ -353,6 +432,9 @@ it.each(ALL_TOOLS.map((t) => [t.name, t] as const))(
     for (const key of sent) expect(contract.keys, `${name} sends ${key}`).toContain(key);
     expect(tool.paginated).toBe(contract.paginated);
     expect(sent.includes('page'), `${name} page`).toBe(contract.paginated);
+    for (const key of ['sort', 'sort_by'])
+      if (tool.inputSchema.properties[key])
+        expect(contract.enums?.[key], `${name}.${key} needs a vendored allowlist`).toBeDefined();
     for (const [key, allowed] of Object.entries(contract.enums ?? {})) {
       const offered = tool.inputSchema.properties[key]?.enum;
       if (!tool.inputSchema.properties[key]) continue;
@@ -361,3 +443,32 @@ it.each(ALL_TOOLS.map((t) => [t.name, t] as const))(
     }
   },
 );
+
+const creds = { instanceUrl: 'https://psa.example.com', apiKey: KEY };
+const sentQuery = () =>
+  Object.fromEntries(new URL(String(vi.mocked(fetch).mock.calls[0][0])).searchParams);
+
+it.each(ALL_TOOLS.filter((t) => t.paginated).map((t) => [t.name, t] as const))(
+  '%s reaches page 2 the way its Alga service pages',
+  async (name, tool) => {
+    await executeTool(tool, { ...requiredArgs(tool), page: 2, limit: 25 }, creds);
+    const query = sentQuery();
+    if (ROUTES[name].paging === 'offset') expect(query.offset).toBe('25');
+    else expect(query).toMatchObject({ page: '2', limit: '25' });
+  },
+);
+
+it.each(ALL_TOOLS.filter((t) => t.inputSchema.properties.limit).map((t) => [t.name, t] as const))(
+  '%s sends its schema maximum limit unchanged',
+  async (_name, tool) => {
+    const max = tool.inputSchema.properties.limit.maximum!;
+    await executeTool(tool, { ...requiredArgs(tool), limit: max }, creds);
+    expect(sentQuery().limit).toBe(String(max));
+  },
+);
+
+function requiredArgs(tool: (typeof ALL_TOOLS)[number]) {
+  return Object.fromEntries(
+    tool.inputSchema.required.map((key) => [key, sample(tool.inputSchema.properties[key])]),
+  );
+}

@@ -4,8 +4,6 @@ import { fetch } from 'undici';
 import {
   requestAlga,
   retryAfterMs,
-  clampPage,
-  clampLimit,
   getCredentials,
   runWithCredentials,
   setGatewayMode,
@@ -49,9 +47,9 @@ afterEach(() => {
 it('sends API and tenant headers, manual redirects, a 30s timeout and safe dispatcher', async () => {
   vi.mocked(fetch).mockResolvedValue(mockResponse(200));
   const timeout = vi.spyOn(AbortSignal, 'timeout');
-  await requestAlga(creds, '/clients', { page: 0, limit: 500, search: 'a&b' });
+  await requestAlga(creds, '/clients', { page: 2, limit: 50, search: 'a&b' });
   const [url, init] = vi.mocked(fetch).mock.calls[0];
-  expect(String(url)).toBe('https://psa.example.com/api/v1/clients?page=1&limit=100&search=a%26b');
+  expect(String(url)).toBe('https://psa.example.com/api/v1/clients?page=2&limit=50&search=a%26b');
   expect(init).toMatchObject({
     redirect: 'manual',
     headers: { 'x-api-key': KEY, 'x-tenant-id': '12345678-1234-1234-1234-123456789abc' },
@@ -96,7 +94,7 @@ it('only ever sends GET without a body', async () => {
   expect(init?.headers).not.toHaveProperty('content-type');
 });
 it.each([429, 502, 503, 504])('stops after three retries for HTTP %s', async (status) => {
-  vi.mocked(fetch).mockImplementation(async () => mockResponse(status, { 'retry-after': '9000' }));
+  vi.mocked(fetch).mockImplementation(async () => mockResponse(status, { 'retry-after': '5' }));
   await expect(requestAlga(creds, '/clients', {}, { sleep })).rejects.toThrow(
     status === 429 ? AlgaRateLimitError : AlgaApiError,
   );
@@ -148,14 +146,14 @@ it('passes the MCP request signal from a tool call to Alga', async () => {
   controller.abort();
   expect(signal?.aborted).toBe(true);
 });
-it('parses Retry-After seconds, HTTP dates, caps and fallback backoff', () => {
+it('parses Retry-After seconds, HTTP dates and fallback backoff', () => {
   const now = Date.parse('2026-01-01T00:00:00Z');
   expect(retryAfterMs('2')).toBe(2000);
   expect(retryAfterMs('0')).toBe(0);
   expect(retryAfterMs('Thu, 01 Jan 2026 00:00:04 GMT', 0, now)).toBe(4000);
-  expect(retryAfterMs('Thu, 01 Jan 2026 00:00:08 GMT', 0, now)).toBe(5000);
+  expect(retryAfterMs('Thu, 01 Jan 2026 00:00:08 GMT', 0, now)).toBe(8000);
   expect(retryAfterMs('Wed, 31 Dec 2025 23:00:00 GMT', 0, now)).toBe(0);
-  expect(retryAfterMs('900')).toBe(5_000);
+  expect(retryAfterMs('900')).toBe(900_000);
   expect(retryAfterMs('nonsense', 2)).toBe(4000);
   expect(retryAfterMs(null)).toBe(1000);
 });
@@ -215,17 +213,12 @@ it('rejects invalid JSON successes, handles empty successes', async () => {
   vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }) as never);
   await expect(requestAlga(creds, '/clients/c1')).resolves.toEqual({ data: null });
 });
-it('passes page through (floored at 1) and clamps limit to the Alga max of 100', () => {
-  expect([clampPage(undefined), clampPage(-1), clampPage(101), clampPage(3.8)]).toEqual([
-    1, 1, 101, 3,
-  ]);
-  expect([
-    clampLimit(undefined),
-    clampLimit(0),
-    clampLimit(101),
-    clampLimit(NaN),
-    clampLimit(7.9),
-  ]).toEqual([25, 1, 100, 25, 7]);
+it("bounds page and limit by each tool's own schema, refusing values outside it", async () => {
+  vi.stubEnv('ALGA_INSTANCE_URL', creds.instanceUrl);
+  vi.stubEnv('ALGA_API_KEY', KEY);
+  for (const args of [{ limit: 101 }, { limit: 0 }, { page: 0 }, { limit: 7.9 }])
+    expect((await dispatchToolCall('alga_clients_list', args, {})).isError).toBe(true);
+  expect(fetch).not.toHaveBeenCalled();
 });
 it('never falls back to env in gateway mode and isolates concurrent credential contexts', async () => {
   vi.stubEnv('ALGA_API_KEY', 'env-key');
@@ -288,9 +281,9 @@ const streamOf = (chunks: number, size: number, onCancel: () => void) => {
   });
 };
 const GET_TOO_LARGE =
-  'Alga sent a response larger than 4 MiB, so it was not read. Narrow the request with filters, fields or a smaller limit and try again.';
+  'Alga sent a response larger than 1 MiB, so it was not read. Narrow the request with filters or a smaller limit and try again.';
 it('rejects a content-length over the upstream cap without reading the body', async () => {
-  expect(MAX_UPSTREAM_RESPONSE_BYTES).toBe(4 * 1024 * 1024);
+  expect(MAX_UPSTREAM_RESPONSE_BYTES).toBe(1024 * 1024);
   const cancel = vi.fn();
   const body = streamOf(1, 10, cancel);
   vi.mocked(fetch).mockResolvedValue(

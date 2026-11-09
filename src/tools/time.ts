@@ -1,4 +1,4 @@
-import { tool, id, bool, baseList, date, dateTime, enumOf, order } from './shared.js';
+import { tool, id, bool, date, dateTime, enumOf, sortBy } from './shared.js';
 const approvalStatus = enumOf('DRAFT', 'SUBMITTED', 'APPROVED', 'CHANGES_REQUESTED');
 export const time = [
   tool(
@@ -6,7 +6,8 @@ export const time = [
     'List time entries, one page at a time. Use to browse or filter by user, work item, dates or billable state.',
     '/time-entries',
     {
-      ...baseList,
+      // TimeEntryService.list: orderBy(`time_entries.${sort}`).
+      ...sortBy('start_time', 'end_time', 'billable_duration', 'created_at', 'updated_at'),
       user_id: id,
       work_item_id: id,
       work_item_type: enumOf(
@@ -42,9 +43,7 @@ export const time = [
     'List time sheets, one page at a time. Use to browse or filter by user, period or approval state.',
     '/time-sheets',
     {
-      ...baseList,
-      sort: enumOf('period_start', 'period_end', 'approval_status', 'submitted_at', 'approved_at'),
-      order,
+      ...sortBy('period_start', 'period_end', 'approval_status', 'submitted_at', 'approved_at'),
       user_id: id,
       period_id: id,
       approval_status: approvalStatus,

@@ -71,13 +71,15 @@ export const limit = (maximum: number, def = 25): Field => ({
   default: def,
 });
 export const order = enumOf('asc', 'desc');
-/** sort and order, for list routes that accept a free sort column. */
-export const sorting: Record<string, Field> = { sort: { type: 'string', maxLength: 128 }, order };
-/** sort, order and fields, for routes served by Alga's ApiBaseController.list. */
-export const baseList: Record<string, Field> = {
-  ...sorting,
-  fields: { type: 'string', maxLength: 1000, description: 'Comma-separated columns to return.' },
-};
+/**
+ * sort and order. Sort is always an enum of columns the route's Alga service can
+ * order by: many services pass sort straight to ORDER BY, where an unknown column
+ * is a 500 and a hidden one would be an ordering oracle.
+ */
+export const sortBy = (...columns: string[]): Record<string, Field> => ({
+  sort: enumOf(...columns),
+  order,
+});
 /** Sent on every paginated call. Page is passed through; Alga caps limit at 100. */
 export const pageFields: Record<string, Field> = {
   page: { type: 'integer', minimum: 1, maximum: 1_000_000, default: 1 },

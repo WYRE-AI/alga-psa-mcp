@@ -1,4 +1,4 @@
-import { tool, id, date, enumOf, sorting } from './shared.js';
+import { tool, id, date, enumOf, sortBy } from './shared.js';
 export const invoices = [
   // InvoiceService.applyInvoiceFilters skips keys it doesn't know, so only real keys are offered.
   tool(
@@ -6,7 +6,11 @@ export const invoices = [
     'List invoices, one page at a time. Filter by client, status, invoice date range or due date range (YYYY-MM-DD, inclusive).',
     '/invoices',
     {
-      ...sorting,
+      // InvoiceService.list: orderBy(`invoices.${sort}`).
+      ...sortBy(
+        ...['invoice_date', 'due_date', 'invoice_number', 'total_amount', 'created_at'],
+        'updated_at',
+      ),
       client_id: id,
       status: enumOf(
         'draft',

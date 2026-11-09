@@ -1,10 +1,16 @@
-import { tool, id, str, bool, baseList, enumOf } from './shared.js';
+import { tool, id, str, bool, enumOf, sortBy } from './shared.js';
 export const clients = [
   tool(
     'alga_clients_list',
     'List clients, one page at a time. Use to browse or filter by name search, type or inactive state.',
     '/clients',
-    { ...baseList, search: str, client_type: enumOf('company', 'individual'), is_inactive: bool },
+    {
+      // ClientService.list: orderBy(`c.${sort}`).
+      ...sortBy('client_name', 'created_at', 'updated_at'),
+      search: str,
+      client_type: enumOf('company', 'individual'),
+      is_inactive: bool,
+    },
     [],
     true,
   ),

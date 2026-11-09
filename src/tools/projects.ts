@@ -1,4 +1,4 @@
-import { tool, id, str, sorting } from './shared.js';
+import { tool, id, str, sortBy } from './shared.js';
 export const projects = [
   tool(
     'alga_projects_task_status_mappings_list',
@@ -12,7 +12,8 @@ export const projects = [
     'List projects, one page at a time. Use to browse or filter by client, status or search.',
     '/projects',
     {
-      ...sorting,
+      // ProjectService.list: orderBy(`projects.${sort}`).
+      ...sortBy('project_name', 'start_date', 'end_date', 'created_at', 'updated_at'),
       client_id: id,
       status: {
         ...str,

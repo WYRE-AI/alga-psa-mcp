@@ -99,11 +99,13 @@ does not ship, is refused with the same unknown-tool error. Every tool carries
 
 By default the instance must use HTTPS, with a hostname, optional port, and no
 userinfo, paths other than `/api/v1` (with optional trailing slash), query or fragment. Private and special-use IP literals
-are refused, as are `localhost`, `*.localhost`, `*.internal` and `*.local` names.
-DNS resolution checks **every** returned address. It blocks loopback, private,
-link-local (including metadata IPs), CGNAT, unspecified, multicast, reserved and
-broadcast destinations; IPv6 local/multicast ranges; IPv4-mapped and compatible
-IPv6; and NAT64/6to4 addresses embedding blocked IPv4 destinations.
+are refused, as are special-use and internal names (`localhost`, `internal`,
+`local`, `test`, `invalid`, `example` and their subdomains, and `*.home.arpa`),
+before any DNS lookup. DNS resolution checks **every** returned address. It blocks
+loopback, private, link-local (including metadata IPs), CGNAT, unspecified,
+multicast, reserved and broadcast destinations; the Azure platform address
+`168.63.129.16`; IPv6 local/multicast ranges; IPv4-mapped and compatible IPv6; and
+NAT64/6to4 addresses embedding blocked IPv4 destinations.
 
 An undici Agent resolves again when opening each socket and passes only checked
 numeric addresses to the connector, preventing DNS rebinding between validation
@@ -117,9 +119,13 @@ gateway mode refuses to start while it is set. No request header can enable it.
 Each tool call has one 30-second deadline that covers every attempt, wait and
 body read, and it stops early if the MCP request is cancelled. HTTP 429 and
 502/503/504 retry at most three times, honoring seconds or HTTP-date
-`Retry-After` values capped at 5 seconds; a retry whose wait would pass the
-deadline is not started. Upstream responses are read as a stream and capped at
-4 MiB; a larger one is aborted with an error asking you to narrow the request.
+`Retry-After` values up to 5 seconds; a longer `Retry-After`, or a retry whose
+wait would pass the deadline, returns the error at once. Upstream responses are
+read as a stream and capped at 1 MiB; a larger one is aborted with an error asking
+you to narrow the request. One process runs at most 16 Alga calls at once; a call
+beyond that fails at once with a retryable error, so a slow or hostile instance
+cannot exhaust the shared container's memory. HTTP `/mcp` refuses JSON-RPC batch
+bodies (the 2025-06 protocol has none), so one request is at most one tool call.
 Other failures become concise tool errors. From an Alga error we keep only its
 code (for example `NOT_FOUND`) and the `x-request-id` response header, and only
 when each is a plain token; Alga's error message, details and network exception
@@ -218,13 +224,17 @@ docker run --rm -i -e MCP_TRANSPORT=stdio -e AUTH_MODE=env \
 ## Tool catalog
 
 Paginated list tools accept `page` (default 1) and `limit` (default 25, 1–100,
-Alga's maximum; the client also clamps it). `page` is passed through as given (1 or
-more; Alga has no page maximum). Each call makes one request; the server never
-fetches further pages on its own. `sort` and `order` are offered only where the
-route reads them, and `fields` (comma-separated columns to return) only on routes
-served by Alga's generic list handler. Some sorts are Alga enums and are typed as
-such. Date filters are typed: `YYYY-MM-DD` for calendar dates and a UTC date-time
-such as `2026-03-01T00:00:00Z` for timestamps.
+Alga's maximum). `page` is passed through as given (1 or more; Alga has no page
+maximum). Every `limit` is bounded by its own tool's schema and sent unchanged.
+Each call makes one request; the server never fetches further pages on its own.
+`alga_ticket_categories_list` also takes `page`, but Alga's category service pages
+by offset only, so the server sends `offset = (page - 1) × limit` with it, and it
+sorts with `sort_by`/`sort_order`. `sort` is always an enum of the columns that
+route's Alga service can order by; `alga_assets_list` offers only `order`, because
+Alga's asset sort is not safe to drive by column name. `fields` (columns to return)
+is offered only on `alga_tickets_list`, the one list Alga applies it to, as an enum
+of Alga's allowed ticket fields. Date filters are typed: `YYYY-MM-DD` for calendar
+dates and a UTC date-time such as `2026-03-01T00:00:00Z` for timestamps.
 
 Search tools (`alga_tickets_search`, `alga_contacts_search`, `alga_assets_search`)
 are not paginated: they return up to `limit` matches. `alga_tickets_comments_list`
@@ -241,8 +251,10 @@ project phase lists, task lists and task status lists use `project_id`, phase
 selection uses `phase_id`, and task get uses `task_id`.
 
 Each tool's query keys are checked against the keys its Alga route actually reads
-(`src/__tests__/alga-contract.test.ts`, vendored from Alga's schemas and
-controllers), so a filter Alga would silently drop fails the build. Tests use mocked
+(`src/__tests__/alga-contract.test.ts`, vendored from Alga's schemas, controllers
+and the service each controller calls), so a filter Alga would silently drop fails
+the build. The same file checks how each list pages (page or offset), every sort
+allowlist, and that each tool's maximum `limit` reaches Alga unchanged. Tests use mocked
 responses and don't contact a live Alga instance.
 
 Three Alga read endpoints are deliberately not separate tools.
@@ -268,7 +280,7 @@ Project phase lists, task lists and task status lists are not paginated. `alga_p
 | `alga_contacts_get`                       | `GET /contacts/{id}`                              | Get one contact by ID. Use after a list or search to see full details.                                                                                                                                                                             |
 | `alga_contacts_list`                      | `GET /contacts`                                   | List contacts, one page at a time. Use to browse or filter by client or inactive state; use alga_contacts_search to find a person by name or email.                                                                                                |
 | `alga_contacts_search`                    | `GET /contacts/search`                            | Search contacts by name, email or other columns and return up to limit matches (not paginated). Optionally limit to one client or include inactive contacts.                                                                                       |
-| `alga_contracts_list`                     | `GET /contracts`                                  | List contract templates, one page at a time. Filter by contract name, active state or whether a contract has plans. There is no per-client filter here.                                                                                            |
+| `alga_contracts_list`                     | `GET /contracts`                                  | List client contracts, one page at a time (each has owner_client_id and owner_client_name); templates are not included. Filter by contract name, active state or whether a contract has plans. There is no per-client filter here.                 |
 | `alga_invoices_get`                       | `GET /invoices/{id}`                              | Get one invoice by ID. Use after a list or search to see full details.                                                                                                                                                                             |
 | `alga_invoices_items_list`                | `GET /invoices/{id}/items`                        | List all line items on an invoice (not paginated).                                                                                                                                                                                                 |
 | `alga_invoices_list`                      | `GET /invoices`                                   | List invoices, one page at a time. Filter by client, status, invoice date range or due date range (YYYY-MM-DD, inclusive).                                                                                                                         |

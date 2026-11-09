@@ -1,10 +1,16 @@
-import { tool, id, str, bool, baseList, limit, listOf } from './shared.js';
+import { tool, id, str, bool, limit, listOf, sortBy } from './shared.js';
 export const contacts = [
   tool(
     'alga_contacts_list',
     'List contacts, one page at a time. Use to browse or filter by client or inactive state; use alga_contacts_search to find a person by name or email.',
     '/contacts',
-    { ...baseList, client_id: id, search: str, is_inactive: bool },
+    {
+      // ContactService.list: client_name and phone_number are mapped, the rest are `c.${sort}`.
+      ...sortBy('full_name', 'email', 'client_name', 'phone_number', 'created_at', 'updated_at'),
+      client_id: id,
+      search: str,
+      is_inactive: bool,
+    },
     [],
     true,
   ),

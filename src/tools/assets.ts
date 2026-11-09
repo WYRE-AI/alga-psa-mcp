@@ -1,10 +1,12 @@
-import { tool, id, str, bool, limit, sorting } from './shared.js';
+import { tool, id, str, bool, limit, order } from './shared.js';
 export const assets = [
+  // AssetService.list orders by an unqualified sort over a joined query, so no sort
+  // column is offered; order applies to Alga's default (created_at).
   tool(
     'alga_assets_list',
     'List assets, one page at a time. Use to browse or filter by client, type, status or location; use alga_assets_search to find assets by text.',
     '/assets',
-    { ...sorting, client_id: id, asset_type: str, status: str, location_id: id, search: str },
+    { order, client_id: id, asset_type: str, status: str, location_id: id, search: str },
     [],
     true,
   ),

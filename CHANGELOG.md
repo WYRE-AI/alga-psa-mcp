@@ -23,16 +23,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `page` is passed through as given (Alga has no page maximum); `limit` stays capped at 100.
-- Upstream responses are capped at 4 MiB (was 5 MiB).
-- One 30-second deadline covers every attempt and wait of a tool call, `Retry-After`
-  is capped at 5 seconds, and a cancelled MCP request cancels the Alga call.
+- `page` is passed through as given (Alga has no page maximum); each tool's own schema
+  bounds `limit`, and the client no longer rewrites `page` or `limit`.
+- Upstream responses are capped at 1 MiB (was 5 MiB), and one process runs at most
+  16 Alga calls at once; further calls fail fast with a retryable error.
+- One 30-second deadline covers every attempt and wait of a tool call, a
+  `Retry-After` over 5 seconds returns the error at once instead of retrying early,
+  and a cancelled MCP request cancels the Alga call.
+- HTTP `/mcp` refuses JSON-RPC batch bodies before the MCP transport.
+- Instance URLs on special-use names (`.test`, `.invalid`, `.example`, `.home.arpa`)
+  are refused before DNS, and `168.63.129.16` (Azure platform) is a blocked address.
+- The release workflow drops its `workflow_dispatch` trigger, matching the template.
 - Every path parameter is checked again just before it enters the URL, and the built URL
   must land on exactly `{instance-origin}/api/v1{path}`. Array query values are refused.
 - `alga_schedules_list` calls the paginated `GET /schedules/search` instead of
   `GET /schedules`, which returned every entry at once.
-- `sort`, `order` and `fields` are offered only on routes that read them; enum and
-  date formats from Alga's schemas are typed in the tool schemas.
+- `sort` is an enum of the columns each route's Alga service can order by (free-text
+  sort reached `ORDER BY` unchecked on several routes, including users). `fields` is
+  offered only on `alga_tickets_list`, as Alga's ticket field allowlist; the other 11
+  lists ignored it. Enum and date formats from Alga's schemas are typed in the tool
+  schemas.
 - The logger also redacts the per-request gateway API key.
 - HTTP startup also refuses placeholder-looking, repeated-pattern and low-variety
   `CONDUIT_S2S_SECRET` values, and in `AUTH_MODE=env` refuses a missing or invalid
@@ -66,6 +76,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unpaginated routes (ticket time entries and assets, client locations, invoice items,
   contact search) no longer advertise pages.
 - `external_id` and `external_parent_id` accept IDs such as `org/repo#42`.
+- `alga_ticket_categories_list` pages: Alga's category service reads only `limit` and
+  `offset`, so `page` 2 returned page 1 again. The server now sends
+  `offset = (page - 1) × limit`, and sorting uses `sort_by`/`sort_order` (`sort` and
+  `order` were ignored).
+- `alga_tickets_comments_list` sends `limit` up to 200 unchanged; a global clamp cut
+  it to 100.
+- `alga_contracts_list` is described as client contracts; Alga excludes templates.
+- Truncation and oversized-response messages no longer suggest `fields`.
 
 ## [0.1.0] - Initial draft (unreleased)
 

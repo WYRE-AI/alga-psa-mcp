@@ -3,7 +3,6 @@ import {
   id,
   str,
   bool,
-  baseList,
   dateTime,
   externalId,
   idList,
@@ -11,14 +10,27 @@ import {
   listOf,
   order,
   enumOf,
+  sortBy,
 } from './shared.js';
+/** TicketService TICKET_LIST_FIELD_ALLOWLIST: the only list route that reads fields. */
+const TICKET_LIST_FIELDS = [
+  ...['ticket_id', 'ticket_number', 'title', 'status_id', 'status_name', 'status_is_closed'],
+  ...['priority_name', 'assigned_to_name', 'client_name', 'contact_name', 'updated_at'],
+  ...['entered_at', 'closed_at', 'tags', 'contact_tags', 'client_tags', 'master_ticket_id'],
+  ...['bundle_master_ticket_number', 'bundle_child_count', 'latest_activity_at', 'mobile_list'],
+];
 export const tickets = [
   tool(
     'alga_tickets_list',
     'List tickets, one page at a time. Use to browse or filter by client, board, status, priority, assignee, open or closed, dates or external link.',
     '/tickets',
     {
-      ...baseList,
+      // TicketService TICKET_LIST_API_SORT_SQL (created_at is its alias for entered_at).
+      ...sortBy(
+        ...['ticket_number', 'title', 'entered_at', 'updated_at', 'closed_at', 'due_date'],
+        ...['client_name', 'status_name', 'priority_name', 'latest_activity_at'],
+      ),
+      fields: listOf(TICKET_LIST_FIELDS, 'Comma-separated columns to return.'),
       board_id: id,
       client_id: id,
       status_id: id,

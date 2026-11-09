@@ -386,6 +386,20 @@ it('caps chunked bodies without trusting Content-Length', async () => {
   expect(result.status).toBe(413);
   expect(fetch).not.toHaveBeenCalled();
 });
+it('rejects JSON-RPC batches before the transport, so one POST is one call', async () => {
+  const { port } = await listen();
+  const batch = `[${Array(100).fill(toolCall()).join(',')}]`;
+  const result = await send(port, { ...creds, 'x-gateway-s2s': proof() }, batch);
+  expect(result.status).toBe(400);
+  expect(JSON.parse(result.text).error.code).toBe(-32600);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it('returns a JSON-RPC parse error for a body that is not JSON', async () => {
+  const { port } = await listen();
+  const result = await send(port, { ...creds, 'x-gateway-s2s': proof() }, '{not json');
+  expect(result.status).toBe(400);
+  expect(JSON.parse(result.text).error.code).toBe(-32700);
+});
 it('supports stateless initialize and tools/list', async () => {
   const { port } = await listen();
   const headers = { ...creds, 'x-gateway-s2s': proof() };

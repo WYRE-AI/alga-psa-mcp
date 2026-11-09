@@ -1,11 +1,15 @@
-import { tool, id, str, baseList, enumOf } from './shared.js';
+import { tool, id, str, enumOf, sortBy } from './shared.js';
 export const knowledge = [
   tool(
     'alga_kb_articles_list',
     'List knowledge articles, one page at a time. Use to browse or filter by search, category, type, audience or status.',
     '/kb-articles',
     {
-      ...baseList,
+      // KbArticleService.list: orderBy(`ka.${sort}`) over KB_ARTICLE_SELECT_COLUMNS.
+      ...sortBy(
+        ...['created_at', 'updated_at', 'published_at', 'last_reviewed_at', 'next_review_due'],
+        'view_count',
+      ),
       search: str,
       category_id: id,
       article_type: enumOf('how_to', 'faq', 'troubleshooting', 'reference'),

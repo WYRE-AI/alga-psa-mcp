@@ -1,4 +1,4 @@
-import { tool, id, str, bool, baseList, enumOf, limit, listOf, order, sorting } from './shared.js';
+import { tool, id, str, bool, enumOf, limit, listOf, order, sortBy } from './shared.js';
 /** SEARCH_OBJECT_TYPES in Alga's packages/types/src/search.ts. */
 const SEARCH_TYPES = [
   'client',
@@ -38,7 +38,12 @@ export const catalog = [
     'alga_users_list',
     'List users, one page at a time. Use to browse or filter by search or inactive state.',
     '/users',
-    { ...baseList, search: str, is_inactive: bool },
+    {
+      // UserService.list: BaseService.applySorting, an unqualified orderBy on users.
+      ...sortBy('username', 'first_name', 'last_name', 'email', 'created_at', 'updated_at'),
+      search: str,
+      is_inactive: bool,
+    },
     [],
     true,
   ),
@@ -53,7 +58,13 @@ export const catalog = [
     'alga_teams_list',
     'List teams of users, one page at a time. Use to browse or filter by team name, manager or whether a team has a manager.',
     '/teams',
-    { ...baseList, team_name: str, manager_id: id, has_manager: bool },
+    {
+      // TeamService.list allowedSortFields.
+      ...sortBy('team_name', 'manager_name', 'member_count', 'created_at', 'updated_at'),
+      team_name: str,
+      manager_id: id,
+      has_manager: bool,
+    },
     [],
     true,
   ),
@@ -61,7 +72,8 @@ export const catalog = [
     'alga_boards_list',
     'List ticket boards, optionally filtered by name search, one page at a time.',
     '/boards',
-    { ...baseList, search: str },
+    // BoardService.list validSortFields.
+    { ...sortBy('display_order', 'board_name', 'is_inactive', 'is_default'), search: str },
     [],
     true,
   ),
@@ -71,7 +83,8 @@ export const catalog = [
     'List statuses, one page at a time. Filter by type (ticket, project, project_task or interaction). Ticket statuses belong to a board, so type=ticket also needs board_id.',
     '/statuses',
     {
-      ...baseList,
+      // StatusService.list: an unqualified orderBy on statuses.
+      ...sortBy('name', 'order_number'),
       type: enumOf('ticket', 'project', 'project_task', 'interaction'),
       board_id: id,
     },
@@ -82,15 +95,23 @@ export const catalog = [
     'alga_priorities_list',
     'List priorities, one page at a time. Use to browse or filter by priority name search.',
     '/priorities',
-    { ...baseList, search: str },
+    // PriorityService.list: an unqualified orderBy on priorities.
+    { ...sortBy('priority_name', 'order_number'), search: str },
     [],
     true,
   ),
+  // CategoryService.listTicketCategories pages by limit+offset and sorts by
+  // sort_by/sort_order; the executor turns page into offset.
   tool(
     'alga_ticket_categories_list',
     'List ticket categories, one page at a time. Use to browse or filter by board or parent category.',
     '/categories/ticket',
-    { ...sorting, board_id: id, parent_category: id },
+    {
+      sort_by: enumOf('category_name', 'created_at'),
+      sort_order: order,
+      board_id: id,
+      parent_category: id,
+    },
     [],
     true,
   ),
@@ -99,21 +120,25 @@ export const catalog = [
     'List services, one page at a time. Use to browse or filter by name search or category.',
     '/services',
     {
-      ...baseList,
-      sort: enumOf('service_name', 'billing_method', 'default_rate'),
-      order,
+      ...sortBy('service_name', 'billing_method', 'default_rate'),
       search: str,
       category_id: id,
     },
     [],
     true,
   ),
-  // contractFilterSchema has no client or status filter.
+  // ContractLineService.listContracts: client-owned headers only (templates excluded),
+  // no client or status filter, sort from its sortColumns map.
   tool(
     'alga_contracts_list',
-    'List contract templates, one page at a time. Filter by contract name, active state or whether a contract has plans. There is no per-client filter here.',
+    'List client contracts, one page at a time (each has owner_client_id and owner_client_name); templates are not included. Filter by contract name, active state or whether a contract has plans. There is no per-client filter here.',
     '/contracts',
-    { ...sorting, contract_name: str, is_active: bool, has_plans: bool },
+    {
+      ...sortBy('contract_name', 'billing_frequency', 'is_active', 'created_at', 'updated_at'),
+      contract_name: str,
+      is_active: bool,
+      has_plans: bool,
+    },
     [],
     true,
   ),

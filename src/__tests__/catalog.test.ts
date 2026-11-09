@@ -10,7 +10,7 @@ routeTests([
     'GET',
     '/categories/ticket',
     { board_id: 'b1' },
-    { ...page, board_id: 'b1' },
+    { ...page, offset: 0, board_id: 'b1' },
   ],
   ['alga_services_list', 'GET', '/services', { category_id: 'c1' }, { ...page, category_id: 'c1' }],
   [

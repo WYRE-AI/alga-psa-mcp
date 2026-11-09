@@ -1,4 +1,9 @@
-import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type Server as HttpServer,
+  type ServerResponse,
+} from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer } from './server.js';
 import { runWithCredentials, setGatewayMode, validateTenantId } from './alga-client.js';
@@ -139,6 +144,22 @@ function resolveS2sSecret(): string {
   refuseStart(MISSING_S2S_SECRET_ERROR);
 }
 
+function jsonRpcError(res: ServerResponse, status: number, code: number, message: string): void {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ jsonrpc: '2.0', error: { code, message }, id: null }));
+}
+
+/** The request body, or null once it passes the cap (the rest is drained, not kept). */
+async function readBody(req: IncomingMessage): Promise<string | null> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req as AsyncIterable<Buffer>) {
+    total += chunk.length;
+    if (total <= MAX_REQUEST_BODY_BYTES) chunks.push(chunk);
+  }
+  return total > MAX_REQUEST_BODY_BYTES ? null : Buffer.concat(chunks).toString('utf8');
+}
+
 /** AUTH_MODE for HTTP: unset or empty is gateway; anything but gateway|env refuses to start. */
 export function resolveAuthMode(): 'gateway' | 'env' {
   const raw = process.env.AUTH_MODE ?? '';
@@ -229,20 +250,29 @@ export async function startHttpServer(): Promise<HttpServer> {
       }
 
       // Body cap runs only after S2S passes so unauthenticated callers still get 401.
+      const tooLarge = `Request body exceeds ${MAX_REQUEST_BODY_BYTES} bytes`;
       const contentLength = Number(headerValue(req.headers['content-length']));
-      if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BODY_BYTES) {
-        res.writeHead(413, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            error: {
-              code: -32600,
-              message: `Request body exceeds ${MAX_REQUEST_BODY_BYTES} bytes`,
-            },
-            id: null,
-          }),
-        );
-        return;
+      if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BODY_BYTES)
+        return jsonRpcError(res, 413, -32600, tooLarge);
+
+      // The body is parsed here so a JSON-RPC batch never reaches the transport:
+      // the 2025-06 protocol has no batching, and one POST must cost one tool call.
+      let parsedBody: unknown;
+      if (req.method === 'POST') {
+        const text = await readBody(req);
+        if (text === null) return jsonRpcError(res, 413, -32600, tooLarge);
+        try {
+          parsedBody = JSON.parse(text);
+        } catch {
+          return jsonRpcError(res, 400, -32700, 'Parse error: Invalid JSON');
+        }
+        if (Array.isArray(parsedBody))
+          return jsonRpcError(
+            res,
+            400,
+            -32600,
+            'Invalid Request: batches are not supported. Send one JSON-RPC message per request.',
+          );
       }
 
       const handle = async () => {
@@ -267,7 +297,7 @@ export async function startHttpServer(): Promise<HttpServer> {
           void server.close();
         });
         await server.connect(transport);
-        await transport.handleRequest(req, res);
+        await transport.handleRequest(req, res, parsedBody);
       };
 
       if (isGatewayMode) {

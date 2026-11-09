@@ -149,8 +149,8 @@ describe('outbound request contract', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(vi.mocked(fetch).mock.calls[0][1]?.redirect).toBe('manual');
   });
-  it('bounds upstream reads at 4 MiB', () => {
-    expect(MAX_UPSTREAM_RESPONSE_BYTES).toBe(4 * 1024 * 1024);
+  it('bounds upstream reads at 1 MiB', () => {
+    expect(MAX_UPSTREAM_RESPONSE_BYTES).toBe(1024 * 1024);
   });
 });
 
