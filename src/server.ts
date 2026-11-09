@@ -18,7 +18,7 @@ export function createServer(tiersHeader?: string): Server {
     tools: listTools(process.env, tiersHeader),
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const { name, arguments: args } = request.params;
     if (toolInputTooLarge(args)) return toolInputTooLargeResult(name);
     try {
@@ -27,6 +27,7 @@ export function createServer(tiersHeader?: string): Server {
         (args || {}) as Record<string, unknown>,
         process.env,
         tiersHeader,
+        extra.signal,
       );
     } catch {
       logger.error('Tool call failed');

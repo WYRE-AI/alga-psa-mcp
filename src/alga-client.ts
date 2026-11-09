@@ -2,6 +2,7 @@
 // call validateInstanceUrl on every request, and inject a fetch bound to createInstanceAgent()
 // (the connect-time DNS check) through the library's `fetch` option. The library only checks
 // URL syntax, so without both it would lose the SSRF and DNS-rebinding protection.
+import { setTimeout as delay } from 'node:timers/promises';
 import { fetch as undiciFetch } from 'undici';
 import type { AlgaCredentials } from './credentials.js';
 import { createInstanceAgent, validateInstanceUrl } from './ssrf.js';
@@ -57,11 +58,15 @@ export function apiFailure(status: number, info: VendorErrorInfo = {}): AlgaApiE
           : AlgaApiError;
   return new Kind(message + diagnostics, status, info.code, info.requestId);
 }
+/** Longest single wait between retries; a longer Retry-After is not worth holding a call for. */
+export const MAX_RETRY_WAIT_MS = 5_000;
+/** Wall time for one tool call, across every attempt and wait. */
+export const REQUEST_DEADLINE_MS = 30_000;
 export function retryAfterMs(value: string | null, attempt = 0, now = Date.now()): number {
   let ms = 1000 * 2 ** attempt;
   if (value && /^\d+(\.\d+)?$/.test(value.trim())) ms = Number(value) * 1000;
   else if (value && Number.isFinite(Date.parse(value))) ms = Math.max(0, Date.parse(value) - now);
-  return Math.min(60_000, Math.max(0, ms));
+  return Math.min(MAX_RETRY_WAIT_MS, Math.max(0, ms));
 }
 /** Page is passed through as given (Alga has no page maximum); it is only floored at 1. */
 export const clampPage = (value: unknown) =>
@@ -116,12 +121,20 @@ export function buildAlgaUrl(base: URL, path: string, query: Record<string, Quer
 }
 
 export interface ClientOptions {
+  /** Deadline for the whole call, retries included. Defaults to REQUEST_DEADLINE_MS. */
   timeoutMs?: number;
   maxResponseBytes?: number;
   fetch?: typeof undiciFetch;
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+  /** The MCP request's cancellation signal; aborting it stops the call. */
+  signal?: AbortSignal;
 }
-/** One read-only GET to Alga. This client cannot send a body or any other method. */
+/**
+ * One read-only GET to Alga. This client cannot send a body or any other
+ * method. A single deadline covers every attempt and wait, and the caller's
+ * signal cancels the call, so a slow or hostile upstream cannot hold a socket
+ * past the tool call.
+ */
 export async function requestAlga(
   creds: AlgaCredentials,
   path: string,
@@ -133,6 +146,12 @@ export async function requestAlga(
   const url = buildAlgaUrl(base, path, query);
   const headers: Record<string, string> = { 'x-api-key': creds.apiKey, accept: 'application/json' };
   if (tenantId) headers['x-tenant-id'] = tenantId;
+  const timeoutMs = options.timeoutMs ?? REQUEST_DEADLINE_MS;
+  const deadline = Date.now() + timeoutMs;
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
+  const sleep =
+    options.sleep ?? ((ms: number, s: AbortSignal) => delay(ms, undefined, { signal: s }));
   const agent = createInstanceAgent();
   try {
     for (let attempt = 0; ; attempt++) {
@@ -140,14 +159,17 @@ export async function requestAlga(
         method: 'GET',
         headers,
         redirect: 'manual',
-        signal: AbortSignal.timeout(options.timeoutMs ?? 30_000),
+        signal,
         dispatcher: agent,
       });
-      if ([429, 502, 503, 504].includes(response.status) && attempt < 3) {
+      const wait = retryAfterMs(response.headers.get('retry-after'), attempt);
+      if (
+        [429, 502, 503, 504].includes(response.status) &&
+        attempt < 3 &&
+        Date.now() + wait < deadline
+      ) {
         await response.body?.cancel();
-        await (options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))))(
-          retryAfterMs(response.headers.get('retry-after'), attempt),
-        );
+        await sleep(wait, signal);
         continue;
       }
       if (!response.ok) throw apiFailure(response.status, await errorInfo(response));

@@ -24,7 +24,7 @@ const creds = {
   instanceUrl: 'https://psa.example.com',
   tenantId: '12345678-1234-1234-1234-123456789abc',
 };
-const sleep = vi.fn(async (_ms: number) => {});
+const sleep = vi.fn(async (_ms: number, _signal?: AbortSignal) => {});
 const mockResponse = (status: number, headers = {}) =>
   json({ error: { message: KEY } }, status, headers) as unknown as Awaited<
     ReturnType<typeof fetch>
@@ -79,7 +79,7 @@ it.each([429, 502, 503, 504])('retries HTTP %s and succeeds', async (status) => 
     .mockResolvedValueOnce(mockResponse(200));
   await requestAlga(creds, '/clients', {}, { sleep });
   expect(fetch).toHaveBeenCalledTimes(2);
-  expect(sleep).toHaveBeenCalledWith(0);
+  expect(sleep).toHaveBeenCalledWith(0, expect.any(AbortSignal));
 });
 it.each([500, 408])('does not retry HTTP %s', async (status) => {
   vi.mocked(fetch).mockResolvedValue(mockResponse(status));
@@ -101,15 +101,61 @@ it.each([429, 502, 503, 504])('stops after three retries for HTTP %s', async (st
     status === 429 ? AlgaRateLimitError : AlgaApiError,
   );
   expect(fetch).toHaveBeenCalledTimes(4);
-  expect(sleep.mock.calls.map(([ms]) => ms)).toEqual([60_000, 60_000, 60_000]);
+  expect(sleep.mock.calls.map(([ms]) => ms)).toEqual([5_000, 5_000, 5_000]);
+});
+it('does not start a retry whose wait would pass the overall deadline', async () => {
+  vi.mocked(fetch).mockImplementation(async () => mockResponse(429, { 'retry-after': '60' }));
+  const error = await failure(requestAlga(creds, '/clients', {}, { sleep, timeoutMs: 4_000 }));
+  expect(error).toBeInstanceOf(AlgaRateLimitError);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(sleep).not.toHaveBeenCalled();
+});
+it('uses one deadline for every attempt of a call', async () => {
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(mockResponse(503, { 'retry-after': '0' }))
+    .mockResolvedValueOnce(mockResponse(200));
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+  await requestAlga(creds, '/clients', {}, { sleep });
+  expect(timeout).toHaveBeenCalledTimes(1);
+  const [first, second] = vi.mocked(fetch).mock.calls.map(([, init]) => init?.signal);
+  expect(first).toBe(second);
+});
+it('stops when the caller cancels the tool call', async () => {
+  const controller = new AbortController();
+  const seen: boolean[] = [];
+  vi.mocked(fetch).mockImplementation(async (_url, init) => {
+    controller.abort();
+    seen.push(Boolean(init?.signal?.aborted));
+    return mockResponse(503, { 'retry-after': '0' });
+  });
+  const realSleep = vi.fn(async (_ms: number, signal?: AbortSignal) => {
+    if (signal?.aborted) throw new Error('aborted');
+  });
+  await expect(
+    requestAlga(creds, '/clients', {}, { sleep: realSleep, signal: controller.signal }),
+  ).rejects.toThrow('The request to Alga timed out or failed. Try again shortly.');
+  expect(seen).toEqual([true]);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+it('passes the MCP request signal from a tool call to Alga', async () => {
+  vi.stubEnv('ALGA_INSTANCE_URL', creds.instanceUrl);
+  vi.stubEnv('ALGA_API_KEY', KEY);
+  vi.mocked(fetch).mockResolvedValue(mockResponse(200));
+  const controller = new AbortController();
+  await dispatchToolCall('alga_clients_list', {}, {}, undefined, controller.signal);
+  const signal = vi.mocked(fetch).mock.calls[0][1]?.signal;
+  expect(signal?.aborted).toBe(false);
+  controller.abort();
+  expect(signal?.aborted).toBe(true);
 });
 it('parses Retry-After seconds, HTTP dates, caps and fallback backoff', () => {
   const now = Date.parse('2026-01-01T00:00:00Z');
   expect(retryAfterMs('2')).toBe(2000);
   expect(retryAfterMs('0')).toBe(0);
-  expect(retryAfterMs('Thu, 01 Jan 2026 00:00:08 GMT', 0, now)).toBe(8000);
+  expect(retryAfterMs('Thu, 01 Jan 2026 00:00:04 GMT', 0, now)).toBe(4000);
+  expect(retryAfterMs('Thu, 01 Jan 2026 00:00:08 GMT', 0, now)).toBe(5000);
   expect(retryAfterMs('Wed, 31 Dec 2025 23:00:00 GMT', 0, now)).toBe(0);
-  expect(retryAfterMs('900')).toBe(60_000);
+  expect(retryAfterMs('900')).toBe(5_000);
   expect(retryAfterMs('nonsense', 2)).toBe(4000);
   expect(retryAfterMs(null)).toBe(1000);
 });

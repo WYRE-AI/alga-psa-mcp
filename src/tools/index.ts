@@ -43,13 +43,18 @@ export async function dispatchToolCall(
   args: Record<string, unknown>,
   env: NodeJS.ProcessEnv = process.env,
   tiersHeader?: string,
+  signal?: AbortSignal,
 ): Promise<CallToolResult> {
   const tool = ALL_TOOLS.find((entry) => entry.name === name);
   if (!tool) return errorResult(UNKNOWN_TOOL);
   // Narrowed out for this request by Conduit: indistinguishable from an unknown tool.
   if (!selectTools(env, tiersHeader).includes(tool)) return errorResult(UNKNOWN_TOOL);
   try {
-    return { content: [{ type: 'text', text: wrapUntrusted(await executeTool(tool, args)) }] };
+    return {
+      content: [
+        { type: 'text', text: wrapUntrusted(await executeTool(tool, args, undefined, signal)) },
+      ],
+    };
   } catch (error) {
     return errorResult(
       error instanceof ToolArgumentError ||

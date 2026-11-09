@@ -67,6 +67,7 @@ export async function executeTool(
   tool: Definition,
   args: Record<string, unknown>,
   creds: AlgaCredentials | null = getCredentials(),
+  signal?: AbortSignal,
 ): Promise<string> {
   validateArgs(tool, args);
   if (!creds?.apiKey || !creds.instanceUrl)
@@ -91,7 +92,7 @@ export async function executeTool(
     ...values,
   };
   if (tool.name === 'alga_search' && query.limit === undefined) query.limit = 25;
-  const result = await requestAlga(creds, path, query);
+  const result = await requestAlga(creds, path, query, { signal });
   const output =
     tool.name === 'alga_projects_task_status_mappings_list' && args.phase_id
       ? { data: effectiveMappings(result, String(args.phase_id)) }
