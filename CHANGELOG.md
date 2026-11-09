@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - One 30-second deadline covers every attempt and wait of a tool call, a
   `Retry-After` over 5 seconds returns the error at once instead of retrying early,
   and a cancelled MCP request cancels the Alga call.
+- An oversized list page is truncated by dropping rows from the end of `data`, keeping
+  `pagination` and every other top-level field, so the result stays valid JSON and the
+  model can still page. It is marked `truncated` with `returned_items`,
+  `total_items_in_page` and a `truncation_hint`. Other oversized results are still cut
+  as text with a truncation note.
 - HTTP `/mcp` refuses JSON-RPC batch bodies before the MCP transport.
 - Instance URLs on special-use names (`.test`, `.invalid`, `.example`, `.home.arpa`)
   are refused before DNS, and `168.63.129.16` (Azure platform) is a blocked address.

@@ -53,11 +53,49 @@ export function validateArgs(tool: Definition, args: Record<string, unknown>): v
     if (value !== undefined) validateField(tool.inputSchema.properties[key], value, key);
   }
 }
+type Page = Record<string, unknown> & { data: unknown[] };
+const isPage = (value: unknown): value is Page =>
+  !!value &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  Array.isArray((value as Page).data);
+const fits = (text: string) => Buffer.byteLength(text) <= MAX_RESPONSE_BYTES;
+
+/**
+ * Fits a list page under the cap by dropping data rows from the end and keeping
+ * every other top-level field (pagination, meta), so the model can still page on.
+ * Returns undefined when even an empty data array does not fit.
+ */
+function shrinkPage(page: Page, render: (v: unknown) => string): string | undefined {
+  const total = page.data.length;
+  const build = (n: number) =>
+    render({
+      ...page,
+      data: page.data.slice(0, n),
+      truncated: true,
+      returned_items: n,
+      total_items_in_page: total,
+      truncation_hint: `Only the first ${n} of ${total} rows in this page fit in the response. The next page starts after the rows left out, so to see them repeat this request with a smaller limit (at most ${Math.max(n, 1)}).`,
+    });
+  if (!fits(build(0))) return undefined;
+  // Output size only grows with n, so binary-search the largest n that fits.
+  let lo = 0;
+  let hi = total - 1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(build(mid))) lo = mid;
+    else hi = mid - 1;
+  }
+  return build(lo);
+}
+
 export function renderResponse(value: unknown, secrets: string[] = []): string {
-  // Redact before truncating so a secret can never survive as a cut-off prefix.
-  const text = redactSecrets(JSON.stringify(value), secrets);
-  const bytes = Buffer.byteLength(text);
-  if (bytes <= MAX_RESPONSE_BYTES) return text;
+  // Redact before measuring or truncating so a secret can never survive as a cut-off prefix.
+  const render = (v: unknown) => redactSecrets(JSON.stringify(v), secrets);
+  const text = render(value);
+  if (fits(text)) return text;
+  const shrunk = isPage(value) ? shrinkPage(value, render) : undefined;
+  if (shrunk) return shrunk;
   return (
     Buffer.from(text).subarray(0, MAX_RESPONSE_BYTES).toString('utf8').replace(/�$/, '') +
     '\n[TRUNCATED: use narrower filters or a smaller limit.]'
