@@ -7,7 +7,12 @@ import { selectTools } from './tools/index.js';
 import { logger } from './utils/logger.js';
 import { MAX_REQUEST_BODY_BYTES } from './input-limits.js';
 import { verifyS2sHeader, S2S_HEADER } from './s2s-verify.js';
-import { validateInstanceUrl, warnPrivateOverride, InstanceUrlError } from './ssrf.js';
+import {
+  validateInstanceUrl,
+  warnPrivateOverride,
+  InstanceUrlError,
+  privateInstancesAllowed,
+} from './ssrf.js';
 
 // Conduit service-to-service auth (gateway#377 parity). HTTP startup fails
 // closed: an empty CONDUIT_S2S_SECRET, or a known placeholder, refuses to
@@ -55,6 +60,10 @@ function weakS2sSecretProblem(secret: string): string | null {
   if (new Set(secret).size < 8) return 'has too few distinct characters';
   return null;
 }
+
+const PRIVATE_IN_GATEWAY_ERROR =
+  'Refusing to start HTTP transport: ALGA_ALLOW_PRIVATE_INSTANCE is not allowed with AUTH_MODE=gateway. ' +
+  'It is a single-tenant sandbox override; unset it on any shared deployment.';
 
 const INSECURE_DEV_NODE_ENV_ERROR =
   'Refusing to start HTTP transport: MCP_ALLOW_INSECURE_DEV requires NODE_ENV=development.';
@@ -161,10 +170,12 @@ export async function startHttpServer(): Promise<HttpServer> {
   const s2sSecret = resolveS2sSecret();
   const authMode = resolveAuthMode();
   selectTools();
+  const isGatewayMode = authMode === 'gateway';
+  // A shared gateway serves many tenants; the sandbox override must never reach it.
+  if (isGatewayMode && privateInstancesAllowed()) refuseStart(PRIVATE_IN_GATEWAY_ERROR);
   warnPrivateOverride();
   const port = parseInt(process.env.MCP_HTTP_PORT || '8080', 10);
   const host = resolveListenHost(s2sSecret);
-  const isGatewayMode = authMode === 'gateway';
   setGatewayMode(isGatewayMode);
 
   const httpServer = createHttpServer((req, res) => {

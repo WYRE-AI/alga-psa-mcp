@@ -3,6 +3,7 @@ import type { LookupFunction } from 'node:net';
 import { isIP } from 'node:net';
 import ipaddr from 'ipaddr.js';
 import { Agent } from 'undici';
+import { isGatewayMode } from './credentials.js';
 import { logger } from './utils/logger.js';
 
 export class InstanceUrlError extends Error {
@@ -16,7 +17,9 @@ export type Resolver = (
   hostname: string,
   options: { all: true },
 ) => Promise<{ address: string; family: number }[]>;
-export const privateInstancesAllowed = () => process.env.ALGA_ALLOW_PRIVATE_INSTANCE === 'true';
+/** Sandbox-only override. Gateway mode serves many tenants, so it never honours it. */
+export const privateInstancesAllowed = () =>
+  !isGatewayMode() && process.env.ALGA_ALLOW_PRIVATE_INSTANCE === 'true';
 let warned = false;
 export function warnPrivateOverride(): void {
   if (privateInstancesAllowed() && !warned) {

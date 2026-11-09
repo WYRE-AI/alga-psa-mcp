@@ -3,11 +3,14 @@ import {
   createSafeLookup,
   isDisallowedAddress,
   parseInstanceUrl,
+  privateInstancesAllowed,
   validateInstanceUrl,
   warnPrivateOverride,
 } from '../ssrf.js';
+import { setGatewayMode } from '../credentials.js';
 const resolvePublic = vi.fn(async () => [{ address: '93.184.216.34', family: 4 }]);
 afterEach(() => {
+  setGatewayMode(false);
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
@@ -159,6 +162,14 @@ describe('URL policy', () => {
       vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', value);
       expect(() => parseInstanceUrl('http://localhost')).toThrow();
     }
+  });
+  it('never allows private instances in gateway mode, even with the env override', async () => {
+    vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', 'true');
+    expect(privateInstancesAllowed()).toBe(true);
+    setGatewayMode(true);
+    expect(privateInstancesAllowed()).toBe(false);
+    for (const value of ['http://10.0.0.5:8080', 'http://169.254.169.254', 'https://127.0.0.1'])
+      expect(() => parseInstanceUrl(value), value).toThrow('The Alga instance URL');
   });
   it.each([
     'https://a:b@localhost',

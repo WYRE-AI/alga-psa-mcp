@@ -251,6 +251,25 @@ it.each([
   expect(result.text).not.toContain(KEY);
   expect(fetch).not.toHaveBeenCalled();
 });
+it('refuses to start in gateway mode when ALGA_ALLOW_PRIVATE_INSTANCE is set', async () => {
+  vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', 'true');
+  await expect(startHttpServer()).rejects.toThrow(
+    'ALGA_ALLOW_PRIVATE_INSTANCE is not allowed with AUTH_MODE=gateway',
+  );
+});
+it('rejects a private or plain-http instance header in gateway mode', async () => {
+  const { port } = await listen();
+  vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', 'true');
+  for (const url of ['http://10.0.0.5:8080', 'http://169.254.169.254', 'http://psa.example.com']) {
+    const result = await send(port, {
+      ...creds,
+      'x-alga-instance-url': url,
+      'x-gateway-s2s': proof(),
+    });
+    expect(result.status, url).toBe(400);
+  }
+  expect(fetch).not.toHaveBeenCalled();
+});
 it('rejects private DNS and ignores header attempts to enable private access', async () => {
   vi.mocked(lookup).mockResolvedValue([{ address: '169.254.169.254', family: 4 }] as never);
   const { port } = await listen();

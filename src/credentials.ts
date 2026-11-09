@@ -22,6 +22,7 @@ let gatewayMode = false;
 export const setGatewayMode = (on: boolean) => {
   gatewayMode = on;
 };
+export const isGatewayMode = () => gatewayMode;
 
 export function getCredentials(): AlgaCredentials | null {
   const scoped = credentials.getStore();
