@@ -2,6 +2,7 @@
 // call validateInstanceUrl on every request, and inject a fetch bound to createInstanceAgent()
 // (the connect-time DNS check) through the library's `fetch` option. The library only checks
 // URL syntax, so without both it would lose the SSRF and DNS-rebinding protection.
+import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fetch as undiciFetch } from 'undici';
 import type { AlgaCredentials } from './credentials.js';
@@ -76,7 +77,14 @@ export function retryAfterMs(value: string | null, attempt = 0, now = Date.now()
 export const MAX_UPSTREAM_RESPONSE_BYTES = 1024 * 1024;
 /** Alga calls one process runs at once; further calls fail fast with a retryable error. */
 export const MAX_CONCURRENT_ALGA_REQUESTS = 16;
+/**
+ * Alga calls one tenant runs at once, so a tenant whose instance answers slowly
+ * cannot hold every process slot for the 30-second deadline and starve the others.
+ */
+export const MAX_CONCURRENT_ALGA_REQUESTS_PER_TENANT = 4;
 let inFlight = 0;
+/** In-flight calls per tenant, keyed by a hash of the API key (never the key itself). */
+const inFlightByTenant = new Map<string, number>();
 /** Error bodies are read only for their code, so a much smaller bound applies. */
 const MAX_ERROR_BODY_BYTES = 64 * 1024;
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
@@ -137,15 +145,26 @@ export async function requestAlga(
   query: Record<string, QueryValue> = {},
   options: ClientOptions = {},
 ): Promise<unknown> {
+  // Keyed by API key rather than instance origin: hosted Alga tenants can share one origin.
+  const tenant = createHash('sha256').update(creds.apiKey).digest('hex');
+  const tenantInFlight = inFlightByTenant.get(tenant) ?? 0;
+  if (tenantInFlight >= MAX_CONCURRENT_ALGA_REQUESTS_PER_TENANT)
+    throw new AlgaApiError(
+      `This connection already has ${MAX_CONCURRENT_ALGA_REQUESTS_PER_TENANT} Alga requests running. Try again in a few seconds.`,
+    );
   if (inFlight >= MAX_CONCURRENT_ALGA_REQUESTS)
     throw new AlgaApiError(
       'This server is handling too many Alga requests right now. Try again in a few seconds.',
     );
   inFlight++;
+  inFlightByTenant.set(tenant, tenantInFlight + 1);
   try {
     return await sendGet(creds, path, query, options);
   } finally {
     inFlight--;
+    const left = (inFlightByTenant.get(tenant) ?? 1) - 1;
+    if (left > 0) inFlightByTenant.set(tenant, left);
+    else inFlightByTenant.delete(tenant);
   }
 }
 

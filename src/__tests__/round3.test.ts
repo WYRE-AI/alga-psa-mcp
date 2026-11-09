@@ -9,6 +9,7 @@ import {
   AlgaApiError,
   AlgaRateLimitError,
   MAX_CONCURRENT_ALGA_REQUESTS,
+  MAX_CONCURRENT_ALGA_REQUESTS_PER_TENANT,
   MAX_UPSTREAM_RESPONSE_BYTES,
 } from '../alga-client.js';
 import { executeTool, MAX_RESPONSE_BYTES, ToolArgumentError } from '../executor.js';
@@ -48,11 +49,14 @@ it('fails fast with a retryable error when too many Alga calls are in flight', a
     () =>
       new Promise((resolve) => release.push(() => resolve(json({ data: [] }) as never))) as never,
   );
-  const running = Array.from({ length: MAX_CONCURRENT_ALGA_REQUESTS }, () =>
-    requestAlga(creds, '/clients'),
+  // One tenant may hold only a few slots, so fill the process from many tenants.
+  const running = Array.from({ length: MAX_CONCURRENT_ALGA_REQUESTS }, (_, i) =>
+    requestAlga({ ...creds, apiKey: `${KEY}-${i}` }, '/clients'),
   );
   await vi.waitFor(() => expect(release).toHaveLength(MAX_CONCURRENT_ALGA_REQUESTS));
-  const error = await requestAlga(creds, '/clients').catch((e: unknown) => e);
+  const error = await requestAlga({ ...creds, apiKey: `${KEY}-new` }, '/clients').catch(
+    (e: unknown) => e,
+  );
   expect(error).toBeInstanceOf(AlgaApiError);
   expect((error as Error).message).toMatch(/Try again in a few seconds/);
   expect(fetch).toHaveBeenCalledTimes(MAX_CONCURRENT_ALGA_REQUESTS);
@@ -61,6 +65,33 @@ it('fails fast with a retryable error when too many Alga calls are in flight', a
   // Finished calls free their slots.
   vi.mocked(fetch).mockImplementation(async () => json({ data: [] }) as never);
   await expect(requestAlga(creds, '/clients')).resolves.toEqual({ data: [] });
+});
+
+it('caps each tenant below the process limit, so one slow instance cannot starve the rest', async () => {
+  expect(MAX_CONCURRENT_ALGA_REQUESTS_PER_TENANT).toBeLessThan(MAX_CONCURRENT_ALGA_REQUESTS);
+  const release: (() => void)[] = [];
+  vi.mocked(fetch).mockImplementation((url) =>
+    String(url).startsWith('https://slow.example.com/')
+      ? (new Promise((resolve) =>
+          release.push(() => resolve(json({ data: [] }) as never)),
+        ) as never)
+      : (Promise.resolve(json({ data: [] })) as never),
+  );
+  const slow = { instanceUrl: 'https://slow.example.com', apiKey: `${KEY}-slow` };
+  const running = Array.from({ length: MAX_CONCURRENT_ALGA_REQUESTS_PER_TENANT }, () =>
+    requestAlga(slow, '/clients'),
+  );
+  await vi.waitFor(() => expect(release).toHaveLength(MAX_CONCURRENT_ALGA_REQUESTS_PER_TENANT));
+  const error = await requestAlga(slow, '/clients').catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(AlgaApiError);
+  expect((error as Error).message).toMatch(/Try again in a few seconds/);
+  // Another tenant is not affected while the slow one holds its slots.
+  await expect(requestAlga(creds, '/clients')).resolves.toEqual({ data: [] });
+  release.forEach((done) => done());
+  await Promise.all(running);
+  // Finished calls free the tenant's slots.
+  vi.mocked(fetch).mockImplementation(async () => json({ data: [] }) as never);
+  await expect(requestAlga(slow, '/clients')).resolves.toEqual({ data: [] });
 });
 
 it('returns a 429 at once when Retry-After is longer than the client will wait', async () => {

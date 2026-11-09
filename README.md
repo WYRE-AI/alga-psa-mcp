@@ -125,9 +125,10 @@ body read, and it stops early if the MCP request is cancelled. HTTP 429 and
 `Retry-After` values up to 5 seconds; a longer `Retry-After`, or a retry whose
 wait would pass the deadline, returns the error at once. Upstream responses are
 read as a stream and capped at 1 MiB; a larger one is aborted with an error asking
-you to narrow the request. One process runs at most 16 Alga calls at once; a call
-beyond that fails at once with a retryable error, so a slow or hostile instance
-cannot exhaust the shared container's memory. HTTP `/mcp` refuses JSON-RPC batch
+you to narrow the request. One process runs at most 16 Alga calls at once, and one
+connection (API key) at most 4; a call beyond either limit fails at once with a
+retryable error, so a slow or hostile instance cannot exhaust the shared
+container's memory or hold every slot while other tenants wait. HTTP `/mcp` refuses JSON-RPC batch
 bodies (the 2025-06 protocol has none), so one request is at most one tool call.
 Other failures become concise tool errors. From an Alga error we keep only its
 code (for example `NOT_FOUND`) and the `x-request-id` response header, and only

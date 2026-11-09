@@ -72,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An HTTP body over the 256 KiB cap gets 413 and the connection is closed at once;
   the rest of the body was read and discarded, so an endless chunked body held the
   socket open.
+- One connection (API key) runs at most 4 Alga calls at once, below the process-wide 16. A tenant whose instance answers slowly could hold all 16 slots for the
+  30-second deadline and make every other tenant's calls fail.
 - `MCP_ALLOWED_HOSTS` (opt-in `Host` allowlist, as in the fleet templates). In insecure
   dev it defaults to loopback names, so a DNS-rebinding page cannot reach a developer's
   unauthenticated server.
