@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Same gates as the fleet's mcp-server-ci reusable workflow, kept inline so
+  # installs run with --ignore-scripts and checkouts never persist credentials.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # No dependency lifecycle scripts; esbuild resolves its platform binary
+      # from the @esbuild/* optional dependency without its postinstall.
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run lint:destructive
+      - name: Guard against per-request process.env credential mutation
+        shell: bash
+        run: |
+          # Assigning request credentials to process.env is a cross-tenant leak in
+          # gateway mode: process.env is process-global. Tests are excluded.
+          matches=$(grep -rnE 'process\.env(\.[A-Za-z_][A-Za-z0-9_]*|\[[^]]+\]) *=[^=]' src \
+            --include='*.ts' | grep -vE '/__tests__/|cred-lint-allow' || true)
+          if [ -n "$matches" ]; then
+            echo "::error::Assignment to process.env found in src/."
+            echo "$matches"
+            exit 1
+          fi
+      - run: npm test
+      - run: npm run smoke
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build -t alga-psa-mcp:test .
