@@ -326,6 +326,20 @@ it('keeps concurrent requests in separate credential contexts without sessions',
   }
   expect((await send(port, { 'x-gateway-s2s': proof() })).status).toBe(401);
 });
+it.each([
+  ['ALGA_INSTANCE_URL', ''],
+  ['ALGA_INSTANCE_URL', 'http://psa.example.com'],
+  ['ALGA_INSTANCE_URL', 'https://10.0.0.5'],
+  ['ALGA_INSTANCE_URL', 'https://psa.example.com/other'],
+  ['ALGA_API_KEY', ''],
+  ['ALGA_API_KEY', '   '],
+])('env mode refuses to start when %s is %j', async (name, value) => {
+  vi.stubEnv('AUTH_MODE', 'env');
+  vi.stubEnv(name, value);
+  await expect(startHttpServer()).rejects.toThrow(
+    'Refusing to start HTTP transport in AUTH_MODE=env',
+  );
+});
 it('env mode reads standalone credentials with S2S enforced', async () => {
   vi.stubEnv('AUTH_MODE', 'env');
   const { port } = await listen();

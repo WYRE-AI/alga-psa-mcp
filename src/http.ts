@@ -11,6 +11,7 @@ import {
   validateInstanceUrl,
   warnPrivateOverride,
   InstanceUrlError,
+  parseInstanceUrl,
   privateInstancesAllowed,
 } from './ssrf.js';
 
@@ -166,6 +167,19 @@ function resolveListenHost(s2sSecret: string): string {
   return LOOPBACK_HOST;
 }
 
+/** AUTH_MODE=env serves one Alga instance from env, so a bad URL or missing key should fail at boot, not per call. */
+function checkEnvCredentials(): void {
+  try {
+    parseInstanceUrl(process.env.ALGA_INSTANCE_URL ?? '');
+  } catch {
+    refuseStart(
+      'Refusing to start HTTP transport in AUTH_MODE=env: ALGA_INSTANCE_URL must be the https:// address of the Alga instance.',
+    );
+  }
+  if (!(process.env.ALGA_API_KEY ?? '').trim())
+    refuseStart('Refusing to start HTTP transport in AUTH_MODE=env: ALGA_API_KEY is empty.');
+}
+
 export async function startHttpServer(): Promise<HttpServer> {
   const s2sSecret = resolveS2sSecret();
   const authMode = resolveAuthMode();
@@ -173,6 +187,7 @@ export async function startHttpServer(): Promise<HttpServer> {
   const isGatewayMode = authMode === 'gateway';
   // A shared gateway serves many tenants; the sandbox override must never reach it.
   if (isGatewayMode && privateInstancesAllowed()) refuseStart(PRIVATE_IN_GATEWAY_ERROR);
+  if (!isGatewayMode) checkEnvCredentials();
   warnPrivateOverride();
   const port = parseInt(process.env.MCP_HTTP_PORT || '8080', 10);
   const host = resolveListenHost(s2sSecret);
