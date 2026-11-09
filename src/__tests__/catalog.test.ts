@@ -15,6 +15,13 @@ routeTests([
   ['alga_services_list', 'GET', '/services', { category_id: 'c1' }, { ...page, category_id: 'c1' }],
   ['alga_contracts_list', 'GET', '/contracts', { client_id: 'c1' }, { ...page, client_id: 'c1' }],
   [
+    'alga_teams_list',
+    'GET',
+    '/teams',
+    { team_name: 'Tier 1', manager_id: 'u1', has_manager: true },
+    { ...page, team_name: 'Tier 1', manager_id: 'u1', has_manager: true },
+  ],
+  [
     'alga_search',
     'GET',
     '/search',

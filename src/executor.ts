@@ -1,8 +1,15 @@
-import { getCredentials, requestAlga, type AlgaCredentials } from './alga-client.js';
+import {
+  getCredentials,
+  requestAlga,
+  type AlgaCredentials,
+  type QueryValue,
+} from './alga-client.js';
 import { toolInputTooLarge } from './input-limits.js';
+import { redactSecrets } from './redact.js';
 import type { Definition, Field } from './tools/shared.js';
+import { pathSegment, ToolArgumentError } from './validate.js';
+export { ToolArgumentError };
 export const MAX_RESPONSE_BYTES = 100 * 1024;
-export class ToolArgumentError extends Error {}
 function validateField(field: Field, value: unknown, name: string): void {
   const bad = () => {
     throw new ToolArgumentError(
@@ -56,13 +63,8 @@ export function validateArgs(tool: Definition, args: Record<string, unknown>): v
   }
 }
 export function renderResponse(value: unknown, secrets: string[] = []): string {
-  let text = JSON.stringify(value);
-  for (const secret of secrets)
-    if (secret) {
-      text = text.split(secret).join('[REDACTED]');
-      const encoded = JSON.stringify(secret).slice(1, -1);
-      text = text.split(encoded).join('[REDACTED]');
-    }
+  // Redact before truncating so a secret can never survive as a cut-off prefix.
+  const text = redactSecrets(JSON.stringify(value), secrets);
   const bytes = Buffer.byteLength(text);
   if (bytes <= MAX_RESPONSE_BYTES) return text;
   return (
@@ -93,9 +95,7 @@ export async function executeTool(
   if (tool.name === 'alga_projects_tasks_list' && args.phase_id)
     route = '/projects/{project_id}/phases/{phase_id}/tasks';
   const pathKeys = [...route.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
-  const path = route.replace(/\{([^}]+)\}/g, (_, key: string) =>
-    encodeURIComponent(String(args[key])),
-  );
+  const path = route.replace(/\{([^}]+)\}/g, (_, key: string) => pathSegment(args[key], key));
   const values = Object.fromEntries(
     Object.entries(args).filter(
       ([key, value]) =>
@@ -108,8 +108,14 @@ export async function executeTool(
         ),
     ),
   );
-  const query =
-    tool.method === 'GET' ? { ...(tool.paginated ? { page: 1, limit: 25 } : {}), ...values } : {};
+  // Schemas only declare scalar query fields for GET tools (contract.test.ts checks this).
+  const query: Record<string, QueryValue> =
+    tool.method === 'GET'
+      ? {
+          ...(tool.paginated ? { page: 1, limit: 25 } : {}),
+          ...(values as Record<string, QueryValue>),
+        }
+      : {};
   if (tool.name === 'alga_search' && query.limit === undefined) query.limit = 25;
   let body: Record<string, unknown> | undefined =
     tool.method === 'POST' || tool.method === 'PUT' ? values : undefined;
@@ -118,7 +124,7 @@ export async function executeTool(
     const task = (await requestAlga(
       creds,
       'GET',
-      `/projects/tasks/${encodeURIComponent(String(args.task_id))}`,
+      `/projects/tasks/${pathSegment(args.task_id, 'task_id')}`,
     )) as {
       data?: { project_id?: unknown; phase_id?: unknown };
     };
@@ -144,7 +150,7 @@ export async function executeTool(
     const mappings = await requestAlga(
       creds,
       'GET',
-      `/projects/${encodeURIComponent(String(args.project_id))}/task-status-mappings`,
+      `/projects/${pathSegment(args.project_id, 'project_id')}/task-status-mappings`,
     );
     const scope = effectiveMappings(mappings, String(args.phase_id));
     const mapping = scope.find((m) => !m.is_closed) ?? scope[0];
@@ -171,7 +177,7 @@ async function assertStatusBelongs(
   const mappings = await requestAlga(
     creds,
     'GET',
-    `/projects/${encodeURIComponent(projectId)}/task-status-mappings`,
+    `/projects/${pathSegment(projectId, 'project_id')}/task-status-mappings`,
   );
   if (!effectiveMappings(mappings, phaseId).some((m) => m.project_status_mapping_id === statusId))
     throw new ToolArgumentError(

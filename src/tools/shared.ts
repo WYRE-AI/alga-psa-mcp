@@ -1,5 +1,6 @@
 import type { Method } from '../alga-client.js';
-export type Tier = 'read' | 'write' | 'destructive';
+import type { Tier } from '../config.js';
+export type { Tier };
 export interface Field {
   type: 'string' | 'integer' | 'number' | 'boolean' | 'array';
   maxLength?: number;
@@ -39,7 +40,8 @@ export const bool: Field = { type: 'boolean' };
 export const num: Field = { type: 'number', minimum: 0 };
 export const ids: Field = { type: 'array', items: id, maxItems: 100 };
 export const pageFields: Record<string, Field> = {
-  page: { type: 'integer', minimum: 1, maximum: 100, default: 1 },
+  // Page is passed through as given; only limit has an Alga maximum (100).
+  page: { type: 'integer', minimum: 1, maximum: 1_000_000, default: 1 },
   limit: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
   sort: { type: 'string', maxLength: 128 },
   order: { type: 'string', enum: ['asc', 'desc'] },

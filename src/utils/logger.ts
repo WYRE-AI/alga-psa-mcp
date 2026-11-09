@@ -1,17 +1,19 @@
+import { scopedApiKey } from '../credentials.js';
+import { redactLogText } from '../redact.js';
+
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
 type Level = keyof typeof LEVELS;
 
-/** Redact both named credential fields and known environment secrets. */
+/**
+ * Redacts credential-named fields, token shapes, the env secrets and the
+ * per-request gateway API key in scope.
+ */
 export function redact(value: string): string {
-  let out = value.replace(
-    /((?:api[-_]?key|secret|authorization)["']?\s*[:=]\s*)[^\s,}"']+/gi,
-    '$1[REDACTED]',
-  );
-  for (const key of ['ALGA_API_KEY', 'CONDUIT_S2S_SECRET']) {
-    const secret = process.env[key];
-    if (secret) out = out.split(secret).join('[REDACTED]');
-  }
-  return out;
+  return redactLogText(value, [
+    process.env.ALGA_API_KEY,
+    process.env.CONDUIT_S2S_SECRET,
+    scopedApiKey(),
+  ]);
 }
 function log(level: Level, message: string, context?: unknown): void {
   const configured = process.env.LOG_LEVEL || 'info';
@@ -27,6 +29,7 @@ function log(level: Level, message: string, context?: unknown): void {
       detail = '[unserializable context]';
     }
   }
+  // stderr only: stdout is the stdio transport.
   console.error(
     redact(`${new Date().toISOString()} [${level.toUpperCase()}] ${message} ${detail}`),
   );

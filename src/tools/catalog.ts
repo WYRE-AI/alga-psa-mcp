@@ -20,6 +20,16 @@ export const catalog = [
     ['id'],
   ),
   tool(
+    'alga_teams_list',
+    'List teams of users, one page at a time. Use to browse or filter by team name, manager or whether a team has a manager.',
+    'GET',
+    '/teams',
+    'read',
+    { team_name: str, manager_id: id, has_manager: bool },
+    [],
+    true,
+  ),
+  tool(
     'alga_boards_list',
     'List ticket boards, optionally filtered by name search, one page at a time.',
     'GET',

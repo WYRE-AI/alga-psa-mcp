@@ -2,6 +2,7 @@ import { createServer as createHttpServer, type Server as HttpServer } from 'nod
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer } from './server.js';
 import { runWithCredentials, setGatewayMode, validateTenantId } from './alga-client.js';
+import { TOOL_TIERS_HEADER } from './config.js';
 import { selectTools } from './tools/index.js';
 import { logger } from './utils/logger.js';
 import { MAX_REQUEST_BODY_BYTES } from './input-limits.js';
@@ -45,6 +46,15 @@ const PLACEHOLDER_S2S_SECRET_ERROR =
 const SHORT_S2S_SECRET_ERROR =
   'Refusing to start HTTP transport: CONDUIT_S2S_SECRET must be at least 32 characters. ' +
   'Generate one with `openssl rand -hex 32`.';
+
+/** Placeholder-looking, a short pattern repeated (e.g. "aaaa..." or "abcabc..."), or low variety. Never echoes the value. */
+function weakS2sSecretProblem(secret: string): string | null {
+  if (/replace|changeme|change-me|placeholder|example|your-?secret/i.test(secret))
+    return 'looks like a placeholder';
+  if (/^(.{1,8}?)\1+$/.test(secret)) return 'is a repeated character pattern';
+  if (new Set(secret).size < 8) return 'has too few distinct characters';
+  return null;
+}
 
 const INSECURE_DEV_NODE_ENV_ERROR =
   'Refusing to start HTTP transport: MCP_ALLOW_INSECURE_DEV requires NODE_ENV=development.';
@@ -100,6 +110,13 @@ function resolveS2sSecret(): string {
   }
   if (secret.length > 0 && secret.length < MIN_S2S_SECRET_LENGTH) {
     refuseStart(SHORT_S2S_SECRET_ERROR);
+  }
+  const weak = secret ? weakS2sSecretProblem(secret) : null;
+  if (weak) {
+    refuseStart(
+      `Refusing to start HTTP transport: CONDUIT_S2S_SECRET ${weak}. ` +
+        'Generate one with `openssl rand -hex 32`.',
+    );
   }
   if (secret) return secret;
 
@@ -211,7 +228,9 @@ export async function startHttpServer(): Promise<HttpServer> {
         // context - switching to a stateful/SSE transport would let a
         // long-lived connection serve later messages under a stale/foreign
         // credential context.
-        const server = createServer();
+        // X-Conduit-Tool-Tiers can only narrow the container's tiers; present-but-empty means no tools.
+        const rawTiers = req.headers[TOOL_TIERS_HEADER];
+        const server = createServer(Array.isArray(rawTiers) ? rawTiers.join(',') : rawTiers);
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
           enableJsonResponse: true,

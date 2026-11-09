@@ -4,36 +4,36 @@ import { validateArgs } from '../executor.js';
 import { lookup } from 'node:dns/promises';
 import { fetch } from 'undici';
 afterEach(() => vi.restoreAllMocks());
-it('has exactly 71 unique tools: 41 read, 18 write, 12 destructive', () => {
-  expect(ALL_TOOLS).toHaveLength(71);
-  expect(new Set(ALL_TOOLS.map((t) => t.name)).size).toBe(71);
+it('has exactly 72 unique tools: 42 read, 18 write, 12 destructive', () => {
+  expect(ALL_TOOLS).toHaveLength(72);
+  expect(new Set(ALL_TOOLS.map((t) => t.name)).size).toBe(72);
   for (const [tier, count] of [
-    ['read', 41],
+    ['read', 42],
     ['write', 18],
     ['destructive', 12],
   ] as const)
     expect(ALL_TOOLS.filter((t) => t.tier === tier)).toHaveLength(count);
-  expect(selectTools({})).toHaveLength(41);
+  expect(selectTools({})).toHaveLength(42);
 });
 const W = { ALGA_ENABLE_WRITES: 'true' };
-it('lists 41 read tools by default, 59 with writes, 71 with destructive', () => {
-  expect(listTools({})).toHaveLength(41);
-  expect(listTools(W)).toHaveLength(59);
-  expect(listTools({ ...W, ALGA_ENABLE_DESTRUCTIVE: 'true' })).toHaveLength(71);
+it('lists 42 read tools by default, 60 with writes, 72 with destructive', () => {
+  expect(listTools({})).toHaveLength(42);
+  expect(listTools(W)).toHaveLength(60);
+  expect(listTools({ ...W, ALGA_ENABLE_DESTRUCTIVE: 'true' })).toHaveLength(72);
 });
 it('does not enable destructive tools without writes', () => {
-  expect(listTools({ ALGA_ENABLE_DESTRUCTIVE: 'true' })).toHaveLength(41);
+  expect(listTools({ ALGA_ENABLE_DESTRUCTIVE: 'true' })).toHaveLength(42);
 });
 it.each(['true', 'TRUE', '1', ' true '])('enables writes and destructive with %s', (value) =>
   expect(selectTools({ ALGA_ENABLE_WRITES: value, ALGA_ENABLE_DESTRUCTIVE: value })).toHaveLength(
-    71,
+    72,
   ),
 );
 it.each(['false', '0', 'yes', 'truex', '2', ''])(
   'does not enable writes or destructive with %s',
   (value) => {
-    expect(selectTools({ ALGA_ENABLE_WRITES: value })).toHaveLength(41);
-    expect(selectTools({ ...W, ALGA_ENABLE_DESTRUCTIVE: value })).toHaveLength(59);
+    expect(selectTools({ ALGA_ENABLE_WRITES: value })).toHaveLength(42);
+    expect(selectTools({ ...W, ALGA_ENABLE_DESTRUCTIVE: value })).toHaveLength(60);
   },
 );
 it.each(['true', '1', 'TRUE'])('read-only wins with %s', (value) => {
@@ -42,7 +42,7 @@ it.each(['true', '1', 'TRUE'])('read-only wins with %s', (value) => {
     ...W,
     ALGA_ENABLE_DESTRUCTIVE: 'true',
   });
-  expect(tools).toHaveLength(41);
+  expect(tools).toHaveLength(42);
   expect(tools.every((t) => t.tier === 'read')).toBe(true);
 });
 it('annotates every tool, prefixes destructive descriptions and keeps schemas closed', () => {

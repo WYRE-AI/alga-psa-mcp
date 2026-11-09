@@ -162,9 +162,24 @@ it.each(['a', 'x'.repeat(31)])('refuses a short S2S secret without echoing it', 
   }
 });
 it('starts with a 32-character S2S secret', async () => {
-  vi.stubEnv('CONDUIT_S2S_SECRET', 'x'.repeat(32));
+  vi.stubEnv('CONDUIT_S2S_SECRET', '0123456789abcdef0123456789ABCDEF');
   const { port } = await listen();
   expect(port).toBeGreaterThan(0);
+});
+it.each([
+  ['x'.repeat(32), 'repeated'],
+  ['abcd'.repeat(10), 'repeated'],
+  ['aabbccdd'.repeat(4) + 'abab', 'too few distinct characters'],
+  ['replace-with-openssl-rand-hex-32-0123456789', 'placeholder'],
+])('refuses a weak S2S secret %#', async (secret, reason) => {
+  vi.stubEnv('CONDUIT_S2S_SECRET', secret);
+  const error = await startHttpServer().then(
+    () => new Error('started'),
+    (e: Error) => e,
+  );
+  expect(error.message).toContain('Refusing to start HTTP transport: CONDUIT_S2S_SECRET');
+  expect(error.message).toContain(reason);
+  expect(error.message).not.toContain(secret);
 });
 it.each(['Gateway', 'garbage', ' gateway2'])('refuses AUTH_MODE=%j', async (mode) => {
   vi.stubEnv('AUTH_MODE', mode);
@@ -365,8 +380,66 @@ it('supports stateless initialize and tools/list', async () => {
     JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
   );
   expect(list.status).toBe(200);
-  expect(JSON.parse(list.text).result.tools).toHaveLength(41);
+  const tools = JSON.parse(list.text).result.tools;
+  expect(tools).toHaveLength(42);
+  for (const tool of tools)
+    expect(tool.annotations).toEqual({ readOnlyHint: true, destructiveHint: false });
   expect(fetch).not.toHaveBeenCalled();
+});
+const listOver = async (port: number, headers: Record<string, string>) =>
+  JSON.parse(
+    (await send(port, headers, JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' })))
+      .text,
+  ).result.tools as { name: string }[];
+it('X-Conduit-Tool-Tiers present but empty exposes zero tools and refuses calls', async () => {
+  vi.stubEnv('ALGA_ENABLE_WRITES', 'true');
+  vi.stubEnv('ALGA_ENABLE_DESTRUCTIVE', 'true');
+  const { port } = await listen();
+  const headers = { ...creds, 'x-gateway-s2s': proof() };
+  expect(await listOver(port, headers)).toHaveLength(72);
+  expect(await listOver(port, { ...headers, 'x-conduit-tool-tiers': '' })).toEqual([]);
+  expect(await listOver(port, { ...headers, 'x-conduit-tool-tiers': 'read' })).toHaveLength(42);
+  const call = await send(
+    port,
+    { ...headers, 'x-conduit-tool-tiers': '' },
+    toolCall('alga_users_list'),
+  );
+  expect(JSON.parse(call.text).result.isError).toBe(true);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it('X-Conduit-Tool-Tiers cannot widen past the container flags', async () => {
+  const { port } = await listen();
+  const headers = {
+    ...creds,
+    'x-gateway-s2s': proof(),
+    'x-conduit-tool-tiers': 'read,write,destructive',
+  };
+  expect(await listOver(port, headers)).toHaveLength(42);
+});
+it('serves one mocked end-to-end read through gateway headers', async () => {
+  vi.mocked(fetch).mockImplementation(
+    async () => json({ data: [{ team_id: 't1', team_name: 'Tier 1' }] }) as never,
+  );
+  const { port } = await listen();
+  const result = await send(
+    port,
+    { ...creds, 'x-gateway-s2s': proof(), 'x-conduit-tool-tiers': 'read' },
+    toolCall('alga_teams_list', { team_name: 'Tier' }),
+  );
+  expect(result.status).toBe(200);
+  const body = JSON.parse(result.text).result;
+  expect(body.isError).not.toBe(true);
+  expect(body.content[0].text).toContain('<untrusted-content nonce=');
+  expect(body.content[0].text).toContain('"team_name":"Tier 1"');
+  const [url, init] = vi.mocked(fetch).mock.calls[0];
+  expect(String(url)).toBe('https://psa.example.com/api/v1/teams?page=1&limit=25&team_name=Tier');
+  expect(init?.method).toBe('GET');
+  expect(init?.headers).toEqual({
+    accept: 'application/json',
+    'x-api-key': KEY,
+    'x-tenant-id': '12345678-1234-1234-1234-123456789abc',
+  });
+  expect(result.text).not.toContain(KEY);
 });
 it('rejects disabled and oversized tool inputs at the MCP boundary', async () => {
   const { port } = await listen();

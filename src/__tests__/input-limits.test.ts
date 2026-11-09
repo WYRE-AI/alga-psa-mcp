@@ -33,7 +33,7 @@ it.each([
   { limit: 101 },
   { limit: 0 },
   { page: 0 },
-  { page: 101 },
+  { page: 1_000_001 },
   { limit: '5' },
   { limit: 1.5 },
   { is_open: 'true' },

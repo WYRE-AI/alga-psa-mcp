@@ -15,7 +15,7 @@ import { AlgaApiError } from '../alga-client.js';
 import { InstanceUrlError } from '../ssrf.js';
 import { wrapUntrusted } from '../untrusted.js';
 
-/** The single inventory of all 71 hand-written Alga tools. */
+/** The single inventory of all 72 hand-written Alga tools. */
 export const ALL_TOOLS = [
   ...tickets,
   ...clients,
@@ -28,20 +28,27 @@ export const ALL_TOOLS = [
   ...schedules,
   ...knowledge,
 ];
-export const selectTools = (env: NodeJS.ProcessEnv = process.env) => selectEnabled(ALL_TOOLS, env);
-export const listTools = (env: NodeJS.ProcessEnv = process.env) => selectTools(env).map(toMcpTool);
+/** `tiersHeader` is the raw X-Conduit-Tool-Tiers value: undefined when absent, '' when empty. */
+export const selectTools = (env: NodeJS.ProcessEnv = process.env, tiersHeader?: string) =>
+  selectEnabled(ALL_TOOLS, env, tiersHeader);
+export const listTools = (env: NodeJS.ProcessEnv = process.env, tiersHeader?: string) =>
+  selectTools(env, tiersHeader).map(toMcpTool);
 const errorResult = (text: string): CallToolResult => ({
   content: [{ type: 'text', text: `Error: ${text}` }],
   isError: true,
 });
+const UNKNOWN_TOOL = 'Unknown tool. Choose a tool from tools/list.';
 export async function dispatchToolCall(
   name: string,
   args: Record<string, unknown>,
   env: NodeJS.ProcessEnv = process.env,
+  tiersHeader?: string,
 ): Promise<CallToolResult> {
   const tool = ALL_TOOLS.find((entry) => entry.name === name);
-  if (!tool) return errorResult('Unknown tool. Choose a tool from tools/list.');
+  if (!tool) return errorResult(UNKNOWN_TOOL);
   if (!selectTools(env).includes(tool)) return errorResult(disabledReason(tool, env));
+  // Narrowed out for this request by Conduit: indistinguishable from an unknown tool.
+  if (!selectTools(env, tiersHeader).includes(tool)) return errorResult(UNKNOWN_TOOL);
   try {
     return { content: [{ type: 'text', text: wrapUntrusted(await executeTool(tool, args)) }] };
   } catch (error) {

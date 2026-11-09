@@ -47,6 +47,20 @@ const blocked = [
   '2002:c0a8:0101::1',
   '2002:7f00:0001::1',
   '2001:db8::1',
+  // Parity with the jamf-mcp ip-policy block list.
+  '192.0.0.1',
+  '192.88.99.1',
+  '198.51.100.1',
+  '203.0.113.1',
+  'fd00:ec2::254',
+  '2001:10::1',
+  '2001:20::1',
+  '100::1',
+  'fec0::1',
+  '::ffff:0:127.0.0.1',
+  '::ffff:0:a9fe:a9fe',
+  '64:ff9b:1::a9fe:a9fe',
+  '2001:0:4136:e378:8000:63bf:3fff:fdd2',
   'not-an-ip',
 ];
 describe('address classification', () => {

@@ -174,9 +174,9 @@ it('rejects invalid JSON successes, handles empty successes', async () => {
   vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }) as never);
   await expect(requestAlga(creds, 'DELETE', '/clients/c1')).resolves.toEqual({ data: null });
 });
-it('clamps page and limit independently with safe defaults', () => {
+it('passes page through (floored at 1) and clamps limit to the Alga max of 100', () => {
   expect([clampPage(undefined), clampPage(-1), clampPage(101), clampPage(3.8)]).toEqual([
-    1, 1, 100, 3,
+    1, 1, 101, 3,
   ]);
   expect([
     clampLimit(undefined),
@@ -221,7 +221,7 @@ it('caps compact response bytes with a truncation note and redacts secrets', () 
   expect(Buffer.byteLength(result)).toBeLessThan(MAX_RESPONSE_BYTES + 150);
   expect(result).toContain('[TRUNCATED:');
   expect(renderResponse({ data: KEY }, [KEY])).not.toContain(KEY);
-  expect(renderResponse({ data: 'a"b' }, ['a"b'])).not.toContain('a\\"b');
+  expect(renderResponse({ data: 'a"bcd' }, ['a"bcd'])).not.toContain('a\\"bcd');
 });
 it('does not log credentials in structured context or exception messages', () => {
   vi.stubEnv('ALGA_API_KEY', KEY);
@@ -247,9 +247,9 @@ const streamOf = (chunks: number, size: number, onCancel: () => void) => {
   });
 };
 const GET_TOO_LARGE =
-  'Alga sent a response larger than 5 MiB, so it was not read. Narrow the request with filters, fields or a smaller limit and try again.';
+  'Alga sent a response larger than 4 MiB, so it was not read. Narrow the request with filters, fields or a smaller limit and try again.';
 it('rejects a content-length over the upstream cap without reading the body', async () => {
-  expect(MAX_UPSTREAM_RESPONSE_BYTES).toBe(5 * 1024 * 1024);
+  expect(MAX_UPSTREAM_RESPONSE_BYTES).toBe(4 * 1024 * 1024);
   const cancel = vi.fn();
   const body = streamOf(1, 10, cancel);
   vi.mocked(fetch).mockResolvedValue(
