@@ -1,15 +1,17 @@
 name: Release
 
-# Thin caller for the canonical reusable release pipeline (build ->
-# semantic-release -> Docker -> MCP Registry -> security). On pull_request and
-# workflow_dispatch only its unconditional verify job runs: the pinned reusable
-# workflow publishes only on a push to main. No push trigger is configured yet,
-# so nothing is published until the first release is approved and a
-# `push: branches: [main]` trigger is added here deliberately.
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+# Thin caller for the canonical reusable release pipeline (build ->
+# semantic-release -> Docker -> MCP Registry -> security). On pull_request and
+# workflow_dispatch only its unconditional verify job runs; a push to main
+# releases, pushes ghcr.io/wyre-ai/alga-psa-mcp and gates it on Trivy, so the
+# Conduit catalog never has to pin a hand-built image.
 
 jobs:
   release:

@@ -3,16 +3,15 @@
   "name": "io.github.WYRE-AI/alga-psa-mcp",
   "title": "Alga PSA",
   "description": "Read-only Alga PSA MCP server: 42 curated GET tools for tickets, clients, time and billing.",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "repository": {
     "url": "https://github.com/WYRE-AI/alga-psa-mcp",
     "source": "github"
   },
   "packages": [
     {
-      "registryType": "npm",
-      "identifier": "@wyre-ai/alga-psa-mcp",
-      "version": "0.1.0",
+      "registryType": "oci",
+      "identifier": "ghcr.io/wyre-ai/alga-psa-mcp:0.0.0",
       "transport": {
         "type": "stdio"
       },
