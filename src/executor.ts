@@ -53,29 +53,68 @@ export function validateArgs(tool: Definition, args: Record<string, unknown>): v
     if (value !== undefined) validateField(tool.inputSchema.properties[key], value, key);
   }
 }
-type Page = Record<string, unknown> & { data: unknown[] };
-const isPage = (value: unknown): value is Page =>
-  !!value &&
-  typeof value === 'object' &&
-  !Array.isArray(value) &&
-  Array.isArray((value as Page).data);
+type Json = Record<string, unknown>;
+const isObject = (value: unknown): value is Json =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+/** The rows a list reply can lose, and the reply rebuilt with fewer of them. */
+interface List {
+  rows: unknown[];
+  withRows: (rows: unknown[]) => Json;
+}
+/** A top-level `data` array, or alga_search's `data.results` (its cursor and counts sit beside it). */
+function listRows(value: unknown): List | undefined {
+  if (!isObject(value)) return undefined;
+  const data = value.data;
+  if (Array.isArray(data)) return { rows: data, withRows: (rows) => ({ ...value, data: rows }) };
+  if (isObject(data) && Array.isArray(data.results))
+    return {
+      rows: data.results,
+      withRows: (rows) => ({ ...value, data: { ...data, results: rows } }),
+    };
+  return undefined;
+}
 const fits = (text: string) => Buffer.byteLength(text) <= MAX_RESPONSE_BYTES;
 
+/** What to tell the model when only `kept` of `total` rows fit. */
+export type TruncationHint = (kept: number, total: number) => string;
+const cut = (kept: number, total: number) =>
+  `Only the first ${kept} of ${total} rows in this response fit.`;
+const smallerLimit: TruncationHint = (kept, total) =>
+  `${cut(kept, total)} The next page starts after the rows left out, so to see them repeat this request with a smaller limit (at most ${Math.max(kept, 1)}).`;
+
 /**
- * Fits a list page under the cap by dropping data rows from the end and keeping
- * every other top-level field (pagination, meta), so the model can still page on.
- * Returns undefined when even an empty data array does not fit.
+ * A hint that names a request the tool accepts: a smaller limit for tools that
+ * page by page or cursor, the next offset for offset tools, and narrowing for
+ * tools that return everything at once (they have no limit to shrink).
  */
-function shrinkPage(page: Page, render: (v: unknown) => string): string | undefined {
-  const total = page.data.length;
+export function truncationHint(tool: Definition, args: Record<string, unknown>): TruncationHint {
+  const props = tool.inputSchema.properties;
+  if (props.offset)
+    return (kept, total) =>
+      `${cut(kept, total)} To read on, repeat this request with offset=${Number(args.offset ?? 0) + Math.max(kept, 1)}.`;
+  if (tool.paginated || props.cursor) return smallerLimit;
+  return (kept, total) =>
+    `${cut(kept, total)} This tool returns all its results at once, so to see the rest, narrow the request with more specific filters.`;
+}
+
+/**
+ * Fits a list under the cap by dropping rows from the end and keeping every
+ * other field (pagination, meta, cursor), so the model can still page on.
+ * Returns undefined when even an empty list does not fit.
+ */
+function shrinkList(
+  list: List,
+  render: (v: unknown) => string,
+  hint: TruncationHint,
+): string | undefined {
+  const total = list.rows.length;
   const build = (n: number) =>
     render({
-      ...page,
-      data: page.data.slice(0, n),
+      ...list.withRows(list.rows.slice(0, n)),
       truncated: true,
       returned_items: n,
       total_items_in_page: total,
-      truncation_hint: `Only the first ${n} of ${total} rows in this page fit in the response. The next page starts after the rows left out, so to see them repeat this request with a smaller limit (at most ${Math.max(n, 1)}).`,
+      truncation_hint: hint(n, total),
     });
   if (!fits(build(0))) return undefined;
   // Output size only grows with n, so binary-search the largest n that fits.
@@ -89,12 +128,17 @@ function shrinkPage(page: Page, render: (v: unknown) => string): string | undefi
   return build(lo);
 }
 
-export function renderResponse(value: unknown, secrets: string[] = []): string {
+export function renderResponse(
+  value: unknown,
+  secrets: string[] = [],
+  hint: TruncationHint = smallerLimit,
+): string {
   // Redact before measuring or truncating so a secret can never survive as a cut-off prefix.
   const render = (v: unknown) => redactSecrets(JSON.stringify(v), secrets);
   const text = render(value);
   if (fits(text)) return text;
-  const shrunk = isPage(value) ? shrinkPage(value, render) : undefined;
+  const list = listRows(value);
+  const shrunk = list ? shrinkList(list, render, hint) : undefined;
   if (shrunk) return shrunk;
   return (
     Buffer.from(text).subarray(0, MAX_RESPONSE_BYTES).toString('utf8').replace(/�$/, '') +
@@ -138,7 +182,11 @@ export async function executeTool(
     tool.name === 'alga_projects_task_status_mappings_list' && args.phase_id
       ? { data: effectiveMappings(result, String(args.phase_id)) }
       : result;
-  return renderResponse(output, [creds.apiKey, process.env.CONDUIT_S2S_SECRET ?? '']);
+  return renderResponse(
+    output,
+    [creds.apiKey, process.env.CONDUIT_S2S_SECRET ?? ''],
+    truncationHint(tool, args),
+  );
 }
 
 /** The phase's own status mappings, or the project's when the phase has none, in display order. */

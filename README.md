@@ -147,11 +147,15 @@ Tool input uses closed schemas and bounded identifiers.
 HTTP bodies are capped at 256 KiB, including chunked bodies; a body that passes the
 cap gets HTTP 413 and the connection is closed without reading the rest. Tool arguments are capped
 at 10,000 elements. Responses are compact JSON retaining data and pagination, capped
-at 100 KiB. A list page over the cap keeps its `pagination` and other top-level fields
-and drops rows from the end of `data`; it stays valid JSON and adds `truncated: true`,
-`returned_items`, `total_items_in_page` and a `truncation_hint` that says to repeat
-the request with a smaller limit, because the next page starts after the rows left
-out. Any other response over the cap is cut as text and ends with a truncation note,
+at 100 KiB. A list over the cap keeps its `pagination` and other top-level fields
+and drops rows from the end of `data` (for `alga_search`, from `data.results`,
+keeping `groups`, `totalCount` and `nextCursor`); it stays valid JSON and adds
+`truncated: true`, `returned_items`, `total_items_in_page` and a `truncation_hint`
+built from the tool's own arguments. Paginated tools and `alga_search` say to repeat
+the request with a smaller limit, because the next page or cursor starts after the
+rows left out; `alga_tickets_comments_list` says which `offset` to continue from; tools
+that return everything at once say to narrow the request. Any other response over the
+cap is cut as text and ends with a truncation note,
 so narrow the query before parsing it as JSON. Known API keys
 and S2S secrets are redacted from output. Logs go to stderr and are redacted,
 including the per-request gateway API key.

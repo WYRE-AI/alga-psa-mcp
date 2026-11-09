@@ -66,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A truncated list's `truncation_hint` names a request the tool accepts. It always said
+  to repeat with a smaller `limit`, which unpaginated tools such as
+  `alga_projects_tasks_list` reject as an unknown argument. Tools that return
+  everything at once now say to narrow the request, and `alga_tickets_comments_list`
+  says which `offset` to continue from.
+- An oversized `alga_search` reply drops rows from `data.results` and keeps `groups`,
+  `totalCount` and `nextCursor`. It used to be cut as text, losing `nextCursor` first
+  and leaving invalid JSON.
 - HTTP `/mcp` answers every method but POST with 405 and `Allow: POST` after the S2S
   check. A signed GET used to open a standalone SSE stream that nothing closed, and
   DELETE returned 200.
