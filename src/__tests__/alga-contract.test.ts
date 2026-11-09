@@ -198,6 +198,10 @@ const ROUTES: Record<string, RouteContract> = {
     keys: [],
   },
   // project.ts projectListQuerySchema; ApiProjectController.list ignores fields.
+  // status: projectStatusSchema accepts names, but ProjectService.list (226-227) runs
+  // where('projects.status', status) and projects.status is a uuid column
+  // (202409071803_initial_schema.cjs), so a name is a Postgres 22P02 and an Alga 500.
+  // Names become IDs only on create/update (resolveStatusNameToId); the tool takes a UUID.
   alga_projects_list: {
     path: '/projects',
     paginated: true,
@@ -318,12 +322,13 @@ const ROUTES: Record<string, RouteContract> = {
       sort: ['name', 'order_number'],
     },
   },
-  // priority.ts priorityListQuerySchema; PriorityService.list: orderBy(sort), no allowlist.
+  // priority.ts priorityListQuerySchema; PriorityService.list: orderBy(sort), no allowlist,
+  // and where('item_type', item_type).
   alga_priorities_list: {
     path: '/priorities',
     paginated: true,
-    keys: [...BASE_LIST, 'search'],
-    enums: { sort: ['priority_name', 'order_number'] },
+    keys: [...BASE_LIST, 'item_type', 'search'],
+    enums: { sort: ['priority_name', 'order_number'], item_type: ['ticket', 'project_task'] },
   },
   // ApiCategoryController.listTicketCategories reads page and limit only for the
   // reply's pagination block; CategoryService.listTicketCategories (288-353) reads
@@ -398,7 +403,15 @@ const ROUTES: Record<string, RouteContract> = {
   alga_kb_articles_get: { path: '/kb-articles/t1', paginated: false, keys: [] },
 };
 
-const SAMPLES = ['t1', '2026-01-01', '2026-01-01T00:00:00Z', 'title', 'full_name', 'ticket'];
+const SAMPLES = [
+  't1',
+  '2026-01-01',
+  '2026-01-01T00:00:00Z',
+  'title',
+  'full_name',
+  'ticket',
+  '0b7c6f2e-3d4a-4b5c-8d9e-0f1a2b3c4d5e',
+];
 function sample(field: Field): unknown {
   if (field.enum) return field.enum[0];
   if (field.type === 'boolean') return true;

@@ -79,7 +79,7 @@ export const tickets = [
   // getComments reads only limit, offset, order and content_format.
   tool(
     'alga_tickets_comments_list',
-    "List comments on a ticket, internal notes included; each comment's is_internal flag says which. Use limit (up to 200) and offset to read long threads in parts.",
+    "List comments on a ticket. Internal notes are included for internal users; each comment's is_internal flag says which. Use limit (up to 200) and offset to read long threads in parts.",
     '/tickets/{id}/comments',
     {
       id,

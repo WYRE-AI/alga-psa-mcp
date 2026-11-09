@@ -35,6 +35,11 @@ export const id: Field = {
   maxLength: 128,
   pattern: `^${ID_PATTERN}$`,
 };
+/** A UUID, for filters Alga compares straight to a uuid column (anything else is a 500). */
+export const uuid: Field = {
+  type: 'string',
+  pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+};
 export const str: Field = { type: 'string', maxLength: 1000 };
 export const bool: Field = { type: 'boolean' };
 /** An ID from another system. Only ever sent as a query value, so any text is fine. */

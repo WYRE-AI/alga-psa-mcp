@@ -70,33 +70,42 @@ export const catalog = [
   ),
   tool(
     'alga_boards_list',
-    'List ticket boards, optionally filtered by name search, one page at a time.',
+    'List ticket boards, optionally filtered by name search, one page at a time. Inactive boards are left out unless include_inactive is true.',
     '/boards',
-    // BoardService.list validSortFields.
-    { ...sortBy('display_order', 'board_name', 'is_inactive', 'is_default'), search: str },
+    {
+      // BoardService.list validSortFields; it drops inactive boards unless include_inactive.
+      ...sortBy('display_order', 'board_name', 'is_inactive', 'is_default'),
+      search: str,
+      include_inactive: bool,
+    },
     [],
     true,
   ),
   // statusListQuerySchema: the filter is `type`, and type=ticket requires board_id.
   tool(
     'alga_statuses_list',
-    'List statuses, one page at a time. Filter by type (ticket, project, project_task or interaction). Ticket statuses belong to a board, so type=ticket also needs board_id.',
+    'List statuses, one page at a time. Filter by type (ticket, project, project_task or interaction) or name search. Ticket statuses belong to a board, so type=ticket also needs board_id.',
     '/statuses',
     {
-      // StatusService.list: an unqualified orderBy on statuses.
+      // StatusService.list: an unqualified orderBy on statuses; search is an ILIKE on name.
       ...sortBy('name', 'order_number'),
       type: enumOf('ticket', 'project', 'project_task', 'interaction'),
       board_id: id,
+      search: str,
     },
     [],
     true,
   ),
   tool(
     'alga_priorities_list',
-    'List priorities, one page at a time. Use to browse or filter by priority name search.',
+    'List priorities, one page at a time. Use to browse or filter by priority name search or by what they apply to (item_type).',
     '/priorities',
-    // PriorityService.list: an unqualified orderBy on priorities.
-    { ...sortBy('priority_name', 'order_number'), search: str },
+    {
+      // PriorityService.list: an unqualified orderBy on priorities.
+      ...sortBy('priority_name', 'order_number'),
+      search: str,
+      item_type: enumOf('ticket', 'project_task'),
+    },
     [],
     true,
   ),
@@ -104,13 +113,14 @@ export const catalog = [
   // sort_by/sort_order; the executor turns page into offset.
   tool(
     'alga_ticket_categories_list',
-    'List ticket categories, one page at a time. Use to browse or filter by board or parent category.',
+    'List ticket categories, one page at a time. Use to browse or filter by board, parent category or name search.',
     '/categories/ticket',
     {
       sort_by: enumOf('category_name', 'created_at'),
       sort_order: order,
       board_id: id,
       parent_category: id,
+      search: str,
     },
     [],
     true,

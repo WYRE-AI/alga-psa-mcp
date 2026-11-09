@@ -66,6 +66,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `alga_projects_list` takes `status` as a project status ID (UUID) only. Alga's list
+  compares it to a uuid column, so a status name such as `active` was a Postgres error
+  and an Alga 500 that told the model to retry. Get IDs from `alga_statuses_list` with
+  `type=project`.
+- `alga_boards_list` takes `include_inactive` (Alga leaves inactive boards out without
+  it, so sorting by `is_inactive` did nothing); `alga_statuses_list` and
+  `alga_ticket_categories_list` take `search`; `alga_priorities_list` takes `item_type`.
+- `alga_tickets_comments_list` no longer promises internal notes to every API key:
+  Alga hides internal comments and threads from client-portal users.
 - A truncated list's `truncation_hint` names a request the tool accepts. It always said
   to repeat with a smaller `limit`, which unpaginated tools such as
   `alga_projects_tasks_list` reject as an unknown argument. Tools that return

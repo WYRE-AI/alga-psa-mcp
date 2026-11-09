@@ -1,4 +1,14 @@
+import { expect, it } from 'vitest';
+import { ALL_TOOLS } from '../tools/index.js';
 import { routeTests } from './helpers.js';
+
+// TicketService.getTicketComments hides internal comments and threads from client-portal users.
+it('does not promise internal notes to every API key', () => {
+  const tool = ALL_TOOLS.find((t) => t.name === 'alga_tickets_comments_list')!;
+  expect(tool.description).toMatch(/internal notes are included for internal users/i);
+  expect(tool.description).toContain('is_internal');
+});
+
 routeTests([
   [
     'alga_tickets_list',

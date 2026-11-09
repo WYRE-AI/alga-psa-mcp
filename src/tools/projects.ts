@@ -1,4 +1,4 @@
-import { tool, id, str, sortBy } from './shared.js';
+import { tool, id, str, sortBy, uuid } from './shared.js';
 export const projects = [
   tool(
     'alga_projects_task_status_mappings_list',
@@ -15,11 +15,11 @@ export const projects = [
       // ProjectService.list: orderBy(`projects.${sort}`).
       ...sortBy('project_name', 'start_date', 'end_date', 'created_at', 'updated_at'),
       client_id: id,
+      // ProjectService.list: where('projects.status', status), a uuid column. Names are
+      // resolved to IDs only on create and update, so a name here is a Postgres error.
       status: {
-        ...str,
-        maxLength: 128,
-        description:
-          'planning, active, on_hold, completed, cancelled, in_progress, or a project status ID.',
+        ...uuid,
+        description: 'A project status ID; get IDs from alga_statuses_list with type=project.',
       },
       search: str,
     },
