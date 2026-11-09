@@ -2,7 +2,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { dispatchToolCall, listTools } from './tools/index.js';
 import { toolInputTooLarge, toolInputTooLargeResult } from './input-limits.js';
-import { logger } from './utils/logger.js';
+import { errorType, logger } from './utils/logger.js';
 
 /**
  * `tiersHeader` is this request's raw X-Conduit-Tool-Tiers value (HTTP only).
@@ -29,8 +29,8 @@ export function createServer(tiersHeader?: string): Server {
         tiersHeader,
         extra.signal,
       );
-    } catch {
-      logger.error('Tool call failed');
+    } catch (error) {
+      logger.error('Tool call failed', { errorType: errorType(error) });
       return {
         content: [
           {

@@ -14,6 +14,7 @@ import { executeTool, ToolArgumentError } from '../executor.js';
 import { AlgaApiError } from '../alga-client.js';
 import { InstanceUrlError } from '../ssrf.js';
 import { wrapUntrusted } from '../untrusted.js';
+import { errorType, logger } from '../utils/logger.js';
 
 /** The single inventory of all 42 hand-written Alga read tools. */
 export const ALL_TOOLS = [
@@ -56,12 +57,16 @@ export async function dispatchToolCall(
       ],
     };
   } catch (error) {
-    return errorResult(
+    if (
       error instanceof ToolArgumentError ||
-        error instanceof AlgaApiError ||
-        error instanceof InstanceUrlError
-        ? error.message
-        : 'Alga tool request failed. Try again; if it keeps failing, check the connection settings.',
+      error instanceof AlgaApiError ||
+      error instanceof InstanceUrlError
+    )
+      return errorResult(error.message);
+    // The message can carry credentials or tenant data, so only the class is logged.
+    logger.error('Unexpected tool failure', { tool: tool.name, errorType: errorType(error) });
+    return errorResult(
+      'Alga tool request failed. Try again; if it keeps failing, check the connection settings.',
     );
   }
 }

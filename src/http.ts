@@ -9,7 +9,7 @@ import { createServer } from './server.js';
 import { runWithCredentials, setGatewayMode, validateTenantId } from './alga-client.js';
 import { TOOL_TIERS_HEADER } from './config.js';
 import { selectTools } from './tools/index.js';
-import { logger } from './utils/logger.js';
+import { errorType, logger } from './utils/logger.js';
 import { MAX_REQUEST_BODY_BYTES } from './input-limits.js';
 import { verifyS2sHeader, S2S_HEADER } from './s2s-verify.js';
 import {
@@ -335,8 +335,8 @@ export async function startHttpServer(): Promise<HttpServer> {
       // environment. S2S is still enforced when a secret is configured.
       await handle();
     };
-    void route().catch(() => {
-      logger.error('HTTP request failed');
+    void route().catch((error: unknown) => {
+      logger.error('HTTP request failed', { errorType: errorType(error) });
       if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' });
       if (!res.writableEnded) res.end(JSON.stringify({ error: 'Request failed.' }));
     });

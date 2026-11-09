@@ -40,3 +40,6 @@ export const logger = {
   warn: (message: string, context?: unknown) => log('warn', message, context),
   error: (message: string, context?: unknown) => log('error', message, context),
 };
+/** An error's class name, safe to log where its message may hold credentials. */
+export const errorType = (error: unknown): string =>
+  error instanceof Error ? error.constructor.name : typeof error;
