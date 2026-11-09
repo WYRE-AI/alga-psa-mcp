@@ -363,6 +363,31 @@ it('returns 404 for unknown paths', async () => {
   const { port } = await listen();
   expect((await send(port, {}, '', '/other', 'GET')).status).toBe(404);
 });
+it('checks S2S before an OPTIONS preflight and never sends CORS headers', async () => {
+  const { port } = await listen();
+  const preflight = (headers: Record<string, string>) =>
+    new Promise<{ status: number; headers: Record<string, unknown> }>((resolve, reject) => {
+      const req = request(
+        { hostname: '127.0.0.1', port, path: '/mcp', method: 'OPTIONS', headers },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers }));
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+  const cors = {
+    origin: 'https://evil.example',
+    'access-control-request-method': 'POST',
+  };
+  const unsigned = await preflight(cors);
+  expect(unsigned.status).toBe(401);
+  const signed = await preflight({ ...cors, ...creds, 'x-gateway-s2s': proof() });
+  for (const res of [unsigned, signed])
+    expect(Object.keys(res.headers).filter((h) => h.startsWith('access-control-'))).toEqual([]);
+  expect(fetch).not.toHaveBeenCalled();
+});
 it('returns 413 for declared oversized bodies only after S2S', async () => {
   const { port } = await listen();
   const body = JSON.stringify({ pad: 'x'.repeat(MAX_REQUEST_BODY_BYTES) });
