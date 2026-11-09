@@ -1,4 +1,4 @@
-import { tool, id, str } from './shared.js';
+import { tool, id, str, sorting } from './shared.js';
 export const projects = [
   tool(
     'alga_projects_task_status_mappings_list',
@@ -11,7 +11,17 @@ export const projects = [
     'alga_projects_list',
     'List projects, one page at a time. Use to browse or filter by client, status or search.',
     '/projects',
-    { client_id: id, status: str, search: str },
+    {
+      ...sorting,
+      client_id: id,
+      status: {
+        ...str,
+        maxLength: 128,
+        description:
+          'planning, active, on_hold, completed, cancelled, in_progress, or a project status ID.',
+      },
+      search: str,
+    },
     [],
     true,
   ),

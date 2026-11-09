@@ -27,21 +27,61 @@ export interface Definition {
   };
   paginated: boolean;
 }
+const ID_PATTERN = '[A-Za-z0-9_\\-:.]+';
+/** A record ID. It may go into a URL path, so it is restricted to safe characters. */
 export const id: Field = {
   type: 'string',
   minLength: 1,
   maxLength: 128,
-  pattern: '^[A-Za-z0-9_\\-:.]+$',
+  pattern: `^${ID_PATTERN}$`,
 };
 export const str: Field = { type: 'string', maxLength: 1000 };
 export const bool: Field = { type: 'boolean' };
+/** An ID from another system. Only ever sent as a query value, so any text is fine. */
+export const externalId: Field = { type: 'string', minLength: 1, maxLength: 1000 };
+export const enumOf = (...values: string[]): Field => ({ type: 'string', enum: values });
+/** Alga's dateSchema: an RFC 3339 date-time in UTC. */
+export const dateTime: Field = {
+  type: 'string',
+  pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$',
+  description: 'UTC date-time, for example 2026-03-01T00:00:00Z.',
+};
+/** Alga's isoDateSchema: a calendar date. */
+export const date: Field = {
+  type: 'string',
+  pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+  description: 'Date as YYYY-MM-DD.',
+};
+/** A comma-separated list of IDs (Alga splits these server-side). */
+export const idList: Field = {
+  type: 'string',
+  maxLength: 4000,
+  pattern: `^${ID_PATTERN}(,${ID_PATTERN})*$`,
+  description: 'Comma-separated IDs.',
+};
+/** A comma-separated list drawn from fixed values (Alga splits these server-side). */
+export function listOf(values: readonly string[], description: string): Field {
+  const one = `(${values.join('|')})`;
+  return { type: 'string', maxLength: 2000, pattern: `^${one}(,${one})*$`, description };
+}
+export const limit = (maximum: number, def = 25): Field => ({
+  type: 'integer',
+  minimum: 1,
+  maximum,
+  default: def,
+});
+export const order = enumOf('asc', 'desc');
+/** sort and order, for list routes that accept a free sort column. */
+export const sorting: Record<string, Field> = { sort: { type: 'string', maxLength: 128 }, order };
+/** sort, order and fields, for routes served by Alga's ApiBaseController.list. */
+export const baseList: Record<string, Field> = {
+  ...sorting,
+  fields: { type: 'string', maxLength: 1000, description: 'Comma-separated columns to return.' },
+};
+/** Sent on every paginated call. Page is passed through; Alga caps limit at 100. */
 export const pageFields: Record<string, Field> = {
-  // Page is passed through as given; only limit has an Alga maximum (100).
   page: { type: 'integer', minimum: 1, maximum: 1_000_000, default: 1 },
-  limit: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
-  sort: { type: 'string', maxLength: 128 },
-  order: { type: 'string', enum: ['asc', 'desc'] },
-  fields: { type: 'string', maxLength: 1000 },
+  limit: limit(100),
 };
 /** Shared schema fragments keep all hand-written definitions consistent. */
 export function tool(

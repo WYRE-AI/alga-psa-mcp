@@ -12,7 +12,7 @@ routeTests([
     'alga_contacts_search',
     'GET',
     '/contacts/search',
-    { query: 'Ada', include_inactive: true },
-    { ...page, query: 'Ada', include_inactive: true },
+    { query: 'Ada', include_inactive: true, fields: 'full_name,email', limit: 10 },
+    { query: 'Ada', include_inactive: true, fields: 'full_name,email', limit: 10 },
   ],
 ]);

@@ -1,10 +1,17 @@
-import { tool, id, str } from './shared.js';
+import { tool, id, str, baseList, enumOf } from './shared.js';
 export const knowledge = [
   tool(
     'alga_kb_articles_list',
-    'List knowledge articles, one page at a time. Use to browse or filter by search, category, audience or status.',
+    'List knowledge articles, one page at a time. Use to browse or filter by search, category, type, audience or status.',
     '/kb-articles',
-    { search: str, category_id: id, audience: str, status: str },
+    {
+      ...baseList,
+      search: str,
+      category_id: id,
+      article_type: enumOf('how_to', 'faq', 'troubleshooting', 'reference'),
+      audience: enumOf('internal', 'client', 'public'),
+      status: enumOf('draft', 'review', 'published', 'archived'),
+    },
     [],
     true,
   ),

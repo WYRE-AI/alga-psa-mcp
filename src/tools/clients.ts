@@ -1,10 +1,10 @@
-import { tool, id, str, bool } from './shared.js';
+import { tool, id, str, bool, baseList, enumOf } from './shared.js';
 export const clients = [
   tool(
     'alga_clients_list',
     'List clients, one page at a time. Use to browse or filter by name search, type or inactive state.',
     '/clients',
-    { search: str, client_type: str, is_inactive: bool },
+    { ...baseList, search: str, client_type: enumOf('company', 'individual'), is_inactive: bool },
     [],
     true,
   ),
@@ -17,17 +17,16 @@ export const clients = [
   ),
   tool(
     'alga_clients_locations_list',
-    'List locations belonging to a client, one page at a time.',
+    'List all locations belonging to a client (not paginated).',
     '/clients/{id}/locations',
     { id },
     ['id'],
-    true,
   ),
   tool(
     'alga_clients_contacts_list',
     'List contacts belonging to one client, one page at a time. Use alga_contacts_list to browse across clients or alga_contacts_search to find a person by name or email.',
     '/clients/{id}/contacts',
-    { id },
+    { id, search: str, is_inactive: bool },
     ['id'],
     true,
   ),

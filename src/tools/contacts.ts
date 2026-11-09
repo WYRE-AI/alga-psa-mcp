@@ -1,10 +1,10 @@
-import { tool, id, str, bool } from './shared.js';
+import { tool, id, str, bool, baseList, limit, listOf } from './shared.js';
 export const contacts = [
   tool(
     'alga_contacts_list',
     'List contacts, one page at a time. Use to browse or filter by client or inactive state; use alga_contacts_search to find a person by name or email.',
     '/contacts',
-    { client_id: id, search: str, is_inactive: bool },
+    { ...baseList, client_id: id, search: str, is_inactive: bool },
     [],
     true,
   ),
@@ -15,12 +15,21 @@ export const contacts = [
     { id },
     ['id'],
   ),
+  // contactSearchSchema: unpaginated; fields picks the columns to match, not to return.
   tool(
     'alga_contacts_search',
-    'Search contacts by name or email and return matches. Optionally limit to one client or include inactive contacts.',
+    'Search contacts by name, email or other columns and return up to limit matches (not paginated). Optionally limit to one client or include inactive contacts.',
     '/contacts/search',
-    { query: str, client_id: id, include_inactive: bool },
+    {
+      query: { ...str, minLength: 1 },
+      fields: listOf(
+        ['full_name', 'email', 'phone_number', 'role', 'notes'],
+        'Comma-separated columns to match the query against (not the columns returned).',
+      ),
+      client_id: id,
+      include_inactive: bool,
+      limit: limit(100),
+    },
     ['query'],
-    true,
   ),
 ];

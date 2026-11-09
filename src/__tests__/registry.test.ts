@@ -33,8 +33,7 @@ it('annotates every tool read-only and keeps schemas closed', () => {
       }
     }
     if (tool.paginated)
-      for (const key of ['page', 'limit', 'sort', 'order', 'fields'])
-        expect(tool.inputSchema.properties).toHaveProperty(key);
+      for (const key of ['page', 'limit']) expect(tool.inputSchema.properties).toHaveProperty(key);
   }
 });
 it('keeps the full JSON-RPC tools/list payload below 60KB', () => {

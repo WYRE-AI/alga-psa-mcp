@@ -13,7 +13,20 @@ routeTests([
     { ...page, board_id: 'b1' },
   ],
   ['alga_services_list', 'GET', '/services', { category_id: 'c1' }, { ...page, category_id: 'c1' }],
-  ['alga_contracts_list', 'GET', '/contracts', { client_id: 'c1' }, { ...page, client_id: 'c1' }],
+  [
+    'alga_contracts_list',
+    'GET',
+    '/contracts',
+    { contract_name: 'Managed', is_active: true },
+    { ...page, contract_name: 'Managed', is_active: true },
+  ],
+  [
+    'alga_statuses_list',
+    'GET',
+    '/statuses',
+    { type: 'ticket', board_id: 'b1' },
+    { ...page, type: 'ticket', board_id: 'b1' },
+  ],
   [
     'alga_teams_list',
     'GET',

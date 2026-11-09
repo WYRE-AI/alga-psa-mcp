@@ -1,4 +1,4 @@
-import { routeTests, page } from './helpers.js';
+import { routeTests } from './helpers.js';
 routeTests([
   [
     'alga_tickets_list',
@@ -27,23 +27,23 @@ routeTests([
     'alga_tickets_search',
     'GET',
     '/tickets/search',
-    { query: 'router', board_id: 'b1' },
-    { ...page, query: 'router', board_id: 'b1' },
+    { query: 'router', client_ids: 'c1,c2', include_closed: true, fields: 'title,ticket_number' },
+    { query: 'router', client_ids: 'c1,c2', include_closed: true, fields: 'title,ticket_number' },
   ],
   [
     'alga_tickets_comments_list',
     'GET',
     '/tickets/t1/comments',
-    { id: 't1', is_internal: true },
-    { ...page, is_internal: true },
+    { id: 't1', limit: 50, offset: 50, order: 'asc', content_format: 'markdown' },
+    { limit: 50, offset: 50, order: 'asc', content_format: 'markdown' },
   ],
-  ['alga_tickets_time_entries_list', 'GET', '/tickets/t1/time-entries', { id: 't1' }, page],
-  ['alga_tickets_assets_list', 'GET', '/tickets/t1/assets', { id: 't1' }, page],
+  ['alga_tickets_time_entries_list', 'GET', '/tickets/t1/time-entries', { id: 't1' }],
+  ['alga_tickets_assets_list', 'GET', '/tickets/t1/assets', { id: 't1' }],
   [
     'alga_tickets_get_by_external_link',
     'GET',
     '/tickets/by-external-link',
-    { system: 'other', external_id: 'e1', external_parent_id: 'p1' },
-    { system: 'other', external_id: 'e1', external_parent_id: 'p1' },
+    { system: 'github', external_id: 'org/repo#42', external_parent_id: 'org/repo' },
+    { system: 'github', external_id: 'org/repo#42', external_parent_id: 'org/repo' },
   ],
 ]);

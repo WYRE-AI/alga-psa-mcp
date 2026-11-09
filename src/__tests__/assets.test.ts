@@ -12,7 +12,7 @@ routeTests([
     'alga_assets_search',
     'GET',
     '/assets/search',
-    { query: 'Laptop', asset_types: 'workstation' },
-    { ...page, query: 'Laptop', asset_types: 'workstation' },
+    { query: 'Laptop', include_extension_data: true },
+    { query: 'Laptop', include_extension_data: true },
   ],
 ]);

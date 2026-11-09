@@ -1,10 +1,28 @@
-import { tool, id, str } from './shared.js';
+import { tool, id, date, enumOf, sorting } from './shared.js';
 export const invoices = [
+  // InvoiceService.applyInvoiceFilters skips keys it doesn't know, so only real keys are offered.
   tool(
     'alga_invoices_list',
-    'List invoices, one page at a time. Use to browse or filter by client, status or date range.',
+    'List invoices, one page at a time. Filter by client, status, invoice date range or due date range (YYYY-MM-DD, inclusive).',
     '/invoices',
-    { client_id: id, status: str, start_date: str, end_date: str },
+    {
+      ...sorting,
+      client_id: id,
+      status: enumOf(
+        'draft',
+        'sent',
+        'paid',
+        'overdue',
+        'cancelled',
+        'pending',
+        'prepayment',
+        'partially_applied',
+      ),
+      invoice_date_from: date,
+      invoice_date_to: date,
+      due_date_from: date,
+      due_date_to: date,
+    },
     [],
     true,
   ),
@@ -17,10 +35,9 @@ export const invoices = [
   ),
   tool(
     'alga_invoices_items_list',
-    'List line items on an invoice, one page at a time.',
+    'List all line items on an invoice (not paginated).',
     '/invoices/{id}/items',
     { id },
     ['id'],
-    true,
   ),
 ];
