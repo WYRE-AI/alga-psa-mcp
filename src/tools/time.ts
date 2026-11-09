@@ -1,0 +1,54 @@
+import { tool, id, bool, date, dateTime, enumOf, sortBy } from './shared.js';
+const approvalStatus = enumOf('DRAFT', 'SUBMITTED', 'APPROVED', 'CHANGES_REQUESTED');
+export const time = [
+  tool(
+    'alga_time_entries_list',
+    'List time entries, one page at a time. Use to browse or filter by user, work item, dates or billable state.',
+    '/time-entries',
+    {
+      // TimeEntryService.list: orderBy(`time_entries.${sort}`).
+      ...sortBy('start_time', 'end_time', 'billable_duration', 'created_at', 'updated_at'),
+      user_id: id,
+      work_item_id: id,
+      work_item_type: enumOf(
+        'ticket',
+        'project_task',
+        'non_billable_category',
+        'ad_hoc',
+        'interaction',
+        'co_managed',
+      ),
+      date_from: date,
+      date_to: date,
+      start_time_from: dateTime,
+      start_time_to: dateTime,
+      end_time_from: dateTime,
+      end_time_to: dateTime,
+      service_id: id,
+      approval_status: approvalStatus,
+      is_billable: bool,
+    },
+    [],
+    true,
+  ),
+  tool(
+    'alga_time_entries_get',
+    'Get one time entry by ID. Use after a list or search to see full details.',
+    '/time-entries/{id}',
+    { id },
+    ['id'],
+  ),
+  tool(
+    'alga_time_sheets_list',
+    'List time sheets, one page at a time. Use to browse or filter by user, period or approval state.',
+    '/time-sheets',
+    {
+      ...sortBy('period_start', 'period_end', 'approval_status', 'submitted_at', 'approved_at'),
+      user_id: id,
+      period_id: id,
+      approval_status: approvalStatus,
+    },
+    [],
+    true,
+  ),
+];

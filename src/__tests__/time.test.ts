@@ -1,0 +1,44 @@
+import { routeTests, page } from './helpers.js';
+routeTests([
+  [
+    'alga_time_entries_list',
+    'GET',
+    '/time-entries',
+    {
+      date_from: '2026-01-01',
+      date_to: '2026-01-02',
+      start_time_from: '2026-01-01T00:00:00Z',
+      start_time_to: '2026-01-02T00:00:00Z',
+      end_time_from: '2026-01-01T00:00:00Z',
+      end_time_to: '2026-01-02T00:00:00Z',
+      service_id: 's',
+      approval_status: 'DRAFT',
+    },
+    {
+      ...page,
+      date_from: '2026-01-01',
+      date_to: '2026-01-02',
+      start_time_from: '2026-01-01T00:00:00Z',
+      start_time_to: '2026-01-02T00:00:00Z',
+      end_time_from: '2026-01-01T00:00:00Z',
+      end_time_to: '2026-01-02T00:00:00Z',
+      service_id: 's',
+      approval_status: 'DRAFT',
+    },
+  ],
+  [
+    'alga_time_entries_list',
+    'GET',
+    '/time-entries',
+    { user_id: 'u1', is_billable: true },
+    { ...page, user_id: 'u1', is_billable: true },
+  ],
+  ['alga_time_entries_get', 'GET', '/time-entries/e1', { id: 'e1' }],
+  [
+    'alga_time_sheets_list',
+    'GET',
+    '/time-sheets',
+    { user_id: 'u1', approval_status: 'SUBMITTED' },
+    { ...page, user_id: 'u1', approval_status: 'SUBMITTED' },
+  ],
+]);

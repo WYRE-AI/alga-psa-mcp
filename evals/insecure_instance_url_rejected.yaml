@@ -1,0 +1,14 @@
+name: a plain-http instance URL is refused in stdio without calling out
+server:
+  command: node
+  args: [dist/index.js]
+  env:
+    ALGA_INSTANCE_URL: http://psa.invalid
+    ALGA_API_KEY: alga-eval-key-not-a-real-credential-0000
+assert:
+  tool: alga_tickets_list
+  args: {}
+  expect:
+    is_error: true
+    contains: ['instance URL']
+timeout: 30s

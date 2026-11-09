@@ -1,0 +1,48 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.WYRE-AI/alga-psa-mcp",
+  "title": "Alga PSA",
+  "description": "Read-only Alga PSA MCP server: 42 curated GET tools for tickets, clients, time and billing.",
+  "version": "0.0.0",
+  "repository": {
+    "url": "https://github.com/WYRE-AI/alga-psa-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/wyre-ai/alga-psa-mcp:0.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ALGA_INSTANCE_URL",
+          "description": "The https:// address you use to sign in to Alga, for example https://psa.example.com. A trailing / or /api/v1 is fine; leave off any other path. Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances must be reachable from the internet over HTTPS with a valid certificate.",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "ALGA_API_KEY",
+          "description": "API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "ALGA_TENANT_ID",
+          "description": "Optional. Leave blank unless Alga support asks for it. A wrong value makes every request fail.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ALGA_TOOL_TIERS",
+          "description": "Comma-separated tool tiers. Every tool is read-only, so the only valid value is read (the default). The X-Conduit-Tool-Tiers request header can only narrow this set.",
+          "isRequired": false,
+          "format": "string",
+          "default": "read"
+        }
+      ]
+    }
+  ]
+}

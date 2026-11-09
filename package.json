@@ -1,0 +1,52 @@
+{
+  "name": "@wyre-ai/alga-psa-mcp",
+  "version": "0.1.0",
+  "description": "Read-only MCP server for Alga PSA with 42 curated GET tools",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "alga-psa-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "server.json",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WYRE-AI/alga-psa-mcp"
+  },
+  "author": "WYRE AI",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint . && node scripts/lint-destructive-warnings.mjs src",
+    "lint:destructive": "node scripts/lint-destructive-warnings.mjs src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "smoke": "node scripts/smoke-stdio.mjs",
+    "start": "node dist/index.js",
+    "start:http": "MCP_TRANSPORT=http node dist/http.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "ipaddr.js": "^2.3.0",
+    "undici": "^6.21.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.39.5",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "tsup": "^8.0.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^4.1.12"
+  }
+}
