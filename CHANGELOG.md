@@ -66,6 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The release no longer loads `@semantic-release/changelog`. The fleet release workflow
+  runs semantic-release without this repo's devDependencies, so the plugin could not be
+  found and the first release failed. The plugin's output was never committed back, and
+  this file is maintained by hand.
 - `alga_projects_list` takes `status` as a project status ID (UUID) only. Alga's list
   compares it to a uuid column, so a status name such as `active` was a Postgres error
   and an Alga 500 that told the model to retry. Get IDs from `alga_statuses_list` with
