@@ -6,10 +6,9 @@
 // whose name contains a destructive verb needs BOTH
 //   (a) a "⚠ DESTRUCTIVE" or "⚠ HIGH-IMPACT" prefix in its description, and
 //   (b) destructiveHint: true.
-// This repo declares tools as tool('name', 'description', method, path, tier, ...)
-// and derives annotations from the tier (registry.ts annotationsFor; asserted in
-// registry.test.ts), so a 'destructive' tier argument satisfies (b). The
-// fleet's `name: '...'` + `destructiveHint: true` object style is also accepted.
+// This repo declares tools as tool('name', 'description', path, ...). Every tool
+// is a read (GET), so no tool name may contain a destructive verb; the fleet's
+// `name: '...'` + `destructiveHint: true` object style is also recognised.
 // Exits 1 if any destructive tool lacks a warning, or if no tool definitions are
 // found at all (so the check can never pass vacuously).
 

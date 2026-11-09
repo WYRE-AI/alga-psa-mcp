@@ -11,7 +11,7 @@ import {
   runWithCredentials,
   setGatewayMode,
 } from '../alga-client.js';
-import { DEFAULT_TIERS, configuredTiers, narrowTiers } from '../config.js';
+import { ALL_TIERS, DEFAULT_TIERS, configuredTiers, narrowTiers } from '../config.js';
 import { redactSecrets } from '../redact.js';
 import { ALL_TOOLS, dispatchToolCall, listTools } from '../tools/index.js';
 import { logger } from '../utils/logger.js';
@@ -21,8 +21,6 @@ import { json, KEY, unwrap } from './helpers.js';
 const TENANT = '12345678-1234-1234-1234-123456789abc';
 const creds = { apiKey: KEY, instanceUrl: 'https://psa.example.com', tenantId: TENANT };
 const textOf = (result: { content: unknown[] }) => (result.content[0] as { text: string }).text;
-const W = { ALGA_ENABLE_WRITES: 'true' };
-const ALL_ON = { ...W, ALGA_ENABLE_DESTRUCTIVE: 'true' };
 
 beforeEach(() => {
   vi.stubEnv('AUTH_MODE', 'env');
@@ -39,42 +37,60 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('read tools are truly read-only and default-on alone', () => {
-  it('every read-tier tool is a GET, and every non-GET tool is write or destructive', () => {
-    for (const tool of ALL_TOOLS) {
-      if (tool.tier === 'read') expect(tool.method, tool.name).toBe('GET');
-      if (tool.method !== 'GET') expect(tool.tier, tool.name).not.toBe('read');
-    }
-  });
-  it('default tools/list is exactly the 42 read tools, all annotated read-only', () => {
-    const listed = listTools({});
-    expect(listed).toHaveLength(42);
-    expect(ALL_TOOLS.filter((t) => t.tier === 'read')).toHaveLength(42);
-    for (const tool of listed)
-      expect(tool.annotations).toEqual({ readOnlyHint: true, destructiveHint: false });
+describe('read-only contract', () => {
+  it('ships only GET tools, all in the read tier, and read is the only tier', () => {
+    expect([...ALL_TIERS]).toEqual(['read']);
     expect([...DEFAULT_TIERS]).toEqual(['read']);
-    expect([...configuredTiers({})]).toEqual(['read']);
+    expect(ALL_TOOLS).toHaveLength(42);
+    for (const tool of ALL_TOOLS) {
+      expect(tool.method, tool.name).toBe('GET');
+      expect(tool.tier, tool.name).toBe('read');
+    }
+    for (const tool of listTools({}))
+      expect(tool.annotations).toEqual({ readOnlyHint: true, destructiveHint: false });
   });
+  it('ALGA_TOOL_TIERS accepts read only and fails loudly on anything else', () => {
+    expect([...configuredTiers({})]).toEqual(['read']);
+    expect([...configuredTiers({ ALGA_TOOL_TIERS: ' Read ' })]).toEqual(['read']);
+    for (const value of ['write', 'read,destructive', 'admin'])
+      expect(() => configuredTiers({ ALGA_TOOL_TIERS: value }), value).toThrow(
+        'Invalid ALGA_TOOL_TIERS',
+      );
+  });
+  it('the old write switches add nothing', () => {
+    expect(listTools({ ALGA_ENABLE_WRITES: 'true', ALGA_ENABLE_DESTRUCTIVE: 'true' })).toHaveLength(
+      42,
+    );
+  });
+  it.each(['alga_clients_merge', 'alga_invoices_finalize', 'alga_tickets_create'])(
+    'former write tool %s is refused as unknown before any network call',
+    async (name) => {
+      const result = await dispatchToolCall(
+        name,
+        { id: 'a', source_client_id: 'b' },
+        { ALGA_ENABLE_WRITES: 'true', ALGA_ENABLE_DESTRUCTIVE: 'true' },
+      );
+      expect(textOf(result)).toBe('Error: Unknown tool. Choose a tool from tools/list.');
+      expect(lookup).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('X-Conduit-Tool-Tiers narrowing', () => {
   it('can only narrow; present-but-empty means no tiers', () => {
-    const all = configuredTiers(ALL_ON);
-    expect([...all]).toEqual(['read', 'write', 'destructive']);
-    expect([...narrowTiers(all, undefined)]).toEqual(['read', 'write', 'destructive']);
-    expect([...narrowTiers(all, ' Read , WRITE ')]).toEqual(['read', 'write']);
+    const all = configuredTiers({});
+    expect([...narrowTiers(all, undefined)]).toEqual(['read']);
+    expect([...narrowTiers(all, ' Read , WRITE ')]).toEqual(['read']);
     expect([...narrowTiers(all, '')]).toEqual([]);
     expect([...narrowTiers(all, 'admin')]).toEqual([]);
-    expect([...narrowTiers(configuredTiers({}), 'read,write,destructive')]).toEqual(['read']);
+    expect([...narrowTiers(all, 'read,write,destructive')]).toEqual(['read']);
   });
   it('an empty header lists zero tools, and the header never widens', () => {
     expect(listTools({}, '')).toEqual([]);
-    expect(listTools(ALL_ON, '')).toEqual([]);
+    expect(listTools({}, 'write')).toEqual([]);
     expect(listTools({}, 'read')).toHaveLength(42);
     expect(listTools({}, 'read,write,destructive')).toHaveLength(42);
-    expect(listTools(ALL_ON, 'write').every((t) => t.annotations?.readOnlyHint === false)).toBe(
-      true,
-    );
   });
   it('a narrowed-out tool is refused as unknown before any network call', async () => {
     const result = await dispatchToolCall('alga_tickets_list', {}, {}, '');
@@ -87,7 +103,7 @@ describe('X-Conduit-Tool-Tiers narrowing', () => {
 
 describe('outbound request contract', () => {
   it('sends exactly the Alga auth headers and nothing credential-like besides', async () => {
-    await requestAlga(creds, 'GET', '/tickets');
+    await requestAlga(creds, '/tickets');
     const headers = vi.mocked(fetch).mock.calls[0][1]?.headers as Record<string, string>;
     expect(headers).toEqual({
       accept: 'application/json',
@@ -116,7 +132,7 @@ describe('outbound request contract', () => {
     // Alga's list controllers keep one value per query key (searchParams.forEach),
     // so a repeated or key[] array would silently drop values.
     await expect(
-      requestAlga(creds, 'GET', '/tickets', { status_id: ['a', 'b'] as unknown as string }),
+      requestAlga(creds, '/tickets', { status_id: ['a', 'b'] as unknown as string }),
     ).rejects.toThrow(AlgaApiError);
     expect(fetch).not.toHaveBeenCalled();
     for (const tool of ALL_TOOLS.filter((t) => t.method === 'GET'))
@@ -205,7 +221,7 @@ describe('error mapping', () => {
         'x-request-id': 'req_01HZX-9.a:b',
       }) as never,
     );
-    const error = await requestAlga(creds, 'GET', '/tickets/t1').then(
+    const error = await requestAlga(creds, '/tickets/t1').then(
       () => null,
       (e: AlgaApiError) => e,
     );
@@ -225,7 +241,7 @@ describe('error mapping', () => {
         'x-request-id': 'id with spaces <b>',
       }) as never,
     );
-    const error = await requestAlga(creds, 'GET', '/tickets').then(
+    const error = await requestAlga(creds, '/tickets').then(
       () => null,
       (e: AlgaApiError) => e,
     );

@@ -1,8 +1,8 @@
-import type { Method } from '../alga-client.js';
 import type { Tier } from '../config.js';
 export type { Tier };
+/** Query fields are scalars only: Alga keeps one value per query key. */
 export interface Field {
-  type: 'string' | 'integer' | 'number' | 'boolean' | 'array';
+  type: 'string' | 'integer' | 'boolean';
   maxLength?: number;
   minLength?: number;
   pattern?: string;
@@ -10,14 +10,13 @@ export interface Field {
   maximum?: number;
   default?: unknown;
   enum?: string[];
-  items?: Field;
-  minItems?: number;
-  maxItems?: number;
+  description?: string;
 }
+/** Every tool is a GET in the read tier; the types keep it that way. */
 export interface Definition {
   name: string;
   description: string;
-  method: Method;
+  method: 'GET';
   path: string;
   tier: Tier;
   inputSchema: {
@@ -35,10 +34,7 @@ export const id: Field = {
   pattern: '^[A-Za-z0-9_\\-:.]+$',
 };
 export const str: Field = { type: 'string', maxLength: 1000 };
-export const text: Field = { type: 'string', maxLength: 30000 };
 export const bool: Field = { type: 'boolean' };
-export const num: Field = { type: 'number', minimum: 0 };
-export const ids: Field = { type: 'array', items: id, maxItems: 100 };
 export const pageFields: Record<string, Field> = {
   // Page is passed through as given; only limit has an Alga maximum (100).
   page: { type: 'integer', minimum: 1, maximum: 1_000_000, default: 1 },
@@ -51,9 +47,7 @@ export const pageFields: Record<string, Field> = {
 export function tool(
   name: string,
   description: string,
-  method: Method,
   path: string,
-  tier: Tier,
   properties: Record<string, Field> = {},
   required: string[] = [],
   paginated = false,
@@ -61,9 +55,9 @@ export function tool(
   return {
     name,
     description,
-    method,
+    method: 'GET',
     path,
-    tier,
+    tier: 'read',
     paginated,
     inputSchema: {
       type: 'object',

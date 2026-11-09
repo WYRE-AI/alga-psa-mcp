@@ -1,11 +1,9 @@
-import { tool, id, str, text, bool } from './shared.js';
+import { tool, id, str } from './shared.js';
 export const invoices = [
   tool(
     'alga_invoices_list',
     'List invoices, one page at a time. Use to browse or filter by client, status or date range.',
-    'GET',
     '/invoices',
-    'read',
     { client_id: id, status: str, start_date: str, end_date: str },
     [],
     true,
@@ -13,49 +11,16 @@ export const invoices = [
   tool(
     'alga_invoices_get',
     'Get one invoice by ID. Use after a list or search to see full details.',
-    'GET',
     '/invoices/{id}',
-    'read',
     { id },
     ['id'],
   ),
   tool(
     'alga_invoices_items_list',
     'List line items on an invoice, one page at a time.',
-    'GET',
     '/invoices/{id}/items',
-    'read',
     { id },
     ['id'],
     true,
-  ),
-  tool(
-    'alga_invoices_finalize',
-    "⚠ DESTRUCTIVE: Finalize a draft invoice that has line items. This can charge the client via auto-pay. Marks it sent, locks items and payment method, may apply or issue client credit (deposit or prepayment) and may queue an accounting export. Emails no one. Can't be undone via these tools or the API.",
-    'POST',
-    '/invoices/{id}/finalize',
-    'destructive',
-    { id },
-    ['id'],
-  ),
-  tool(
-    'alga_invoices_send',
-    '⚠ DESTRUCTIVE: Email an invoice to the addresses in email_addresses (at least one). This sends a real email and marks the invoice as sent.',
-    'POST',
-    '/invoices/{id}/send',
-    'destructive',
-    {
-      id,
-      email_addresses: {
-        type: 'array',
-        items: { ...str, minLength: 1 },
-        minItems: 1,
-        maxItems: 50,
-      },
-      subject: str,
-      message: text,
-      include_pdf: bool,
-    },
-    ['id', 'email_addresses'],
   ),
 ];

@@ -82,9 +82,6 @@ beforeEach(() => {
   vi.stubEnv('ALGA_ALLOW_PRIVATE_INSTANCE', 'false');
   vi.stubEnv('NODE_ENV', 'production');
   vi.stubEnv('MCP_ALLOW_INSECURE_DEV', '');
-  vi.stubEnv('READ_ONLY_MODE', 'false');
-  vi.stubEnv('ALGA_ENABLE_WRITES', 'false');
-  vi.stubEnv('ALGA_ENABLE_DESTRUCTIVE', 'false');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.mocked(lookup).mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never);
   vi.mocked(fetch).mockImplementation(async () => json({ data: [] }) as never);
@@ -392,11 +389,9 @@ const listOver = async (port: number, headers: Record<string, string>) =>
       .text,
   ).result.tools as { name: string }[];
 it('X-Conduit-Tool-Tiers present but empty exposes zero tools and refuses calls', async () => {
-  vi.stubEnv('ALGA_ENABLE_WRITES', 'true');
-  vi.stubEnv('ALGA_ENABLE_DESTRUCTIVE', 'true');
   const { port } = await listen();
   const headers = { ...creds, 'x-gateway-s2s': proof() };
-  expect(await listOver(port, headers)).toHaveLength(72);
+  expect(await listOver(port, headers)).toHaveLength(42);
   expect(await listOver(port, { ...headers, 'x-conduit-tool-tiers': '' })).toEqual([]);
   expect(await listOver(port, { ...headers, 'x-conduit-tool-tiers': 'read' })).toHaveLength(42);
   const call = await send(
@@ -407,7 +402,7 @@ it('X-Conduit-Tool-Tiers present but empty exposes zero tools and refuses calls'
   expect(JSON.parse(call.text).result.isError).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
 });
-it('X-Conduit-Tool-Tiers cannot widen past the container flags', async () => {
+it('X-Conduit-Tool-Tiers cannot widen past the read tier', async () => {
   const { port } = await listen();
   const headers = {
     ...creds,
@@ -441,11 +436,12 @@ it('serves one mocked end-to-end read through gateway headers', async () => {
   });
   expect(result.text).not.toContain(KEY);
 });
-it('rejects disabled and oversized tool inputs at the MCP boundary', async () => {
+it('rejects former write tools and oversized tool inputs at the MCP boundary', async () => {
   const { port } = await listen();
   const headers = { ...creds, 'x-gateway-s2s': proof() };
-  const disabled = await send(port, headers, toolCall('alga_clients_delete', { id: 'c1' }));
-  expect(JSON.parse(disabled.text).result.isError).toBe(true);
+  const removed = await send(port, headers, toolCall('alga_clients_delete', { id: 'c1' }));
+  expect(JSON.parse(removed.text).result.isError).toBe(true);
+  expect(removed.text).toContain('Unknown tool');
   const oversized = await send(
     port,
     headers,

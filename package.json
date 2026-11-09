@@ -1,7 +1,7 @@
 {
   "name": "@wyre-ai/alga-psa-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Alga PSA with 72 curated tools (42 read, 18 write, 12 destructive)",
+  "description": "Read-only MCP server for Alga PSA with 42 curated GET tools",
   "type": "module",
   "main": "./dist/index.js",
   "bin": {

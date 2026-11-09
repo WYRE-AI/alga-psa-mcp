@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.WYRE-AI/alga-psa-mcp",
   "title": "Alga PSA",
-  "description": "72 curated Alga PSA tools: 42 read, 18 write, 12 destructive. Writes are off by default.",
+  "description": "Read-only Alga PSA MCP server: 42 curated GET tools for tickets, clients, time and billing.",
   "version": "0.1.0",
   "repository": {
     "url": "https://github.com/WYRE-AI/alga-psa-mcp",
@@ -37,25 +37,11 @@
           "format": "string"
         },
         {
-          "name": "ALGA_ENABLE_WRITES",
-          "description": "Turns on the 18 write tools (create and update). Off by default. Container-wide: applies to every connection the container serves.",
+          "name": "ALGA_TOOL_TIERS",
+          "description": "Comma-separated tool tiers. Every tool is read-only, so the only valid value is read (the default). The X-Conduit-Tool-Tiers request header can only narrow this set.",
           "isRequired": false,
           "format": "string",
-          "default": "false"
-        },
-        {
-          "name": "ALGA_ENABLE_DESTRUCTIVE",
-          "description": "Turns on the 12 destructive tools (delete, merge, finalize, send, approve). Needs ALGA_ENABLE_WRITES=true too. Off by default.",
-          "isRequired": false,
-          "format": "string",
-          "default": "false"
-        },
-        {
-          "name": "READ_ONLY_MODE",
-          "description": "Exposes read tools only, even if writes are turned on. Off by default.",
-          "isRequired": false,
-          "format": "string",
-          "default": "false"
+          "default": "read"
         }
       ]
     }

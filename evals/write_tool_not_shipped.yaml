@@ -1,4 +1,4 @@
-name: write tools are refused by default, before any upstream call
+name: write tools are not shipped, so a former write tool name is unknown
 server:
   command: node
   args: [dist/index.js]
@@ -10,5 +10,5 @@ assert:
   args: {}
   expect:
     is_error: true
-    contains: ['turned off']
+    contains: ['Unknown tool']
 timeout: 30s

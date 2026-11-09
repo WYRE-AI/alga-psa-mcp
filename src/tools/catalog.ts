@@ -3,9 +3,7 @@ export const catalog = [
   tool(
     'alga_users_list',
     'List users, one page at a time. Use to browse or filter by search or inactive state.',
-    'GET',
     '/users',
-    'read',
     { search: str, is_inactive: bool },
     [],
     true,
@@ -13,18 +11,14 @@ export const catalog = [
   tool(
     'alga_users_get',
     'Get one user profile by ID. Use after a list or search to see full details.',
-    'GET',
     '/users/{id}',
-    'read',
     { id },
     ['id'],
   ),
   tool(
     'alga_teams_list',
     'List teams of users, one page at a time. Use to browse or filter by team name, manager or whether a team has a manager.',
-    'GET',
     '/teams',
-    'read',
     { team_name: str, manager_id: id, has_manager: bool },
     [],
     true,
@@ -32,9 +26,7 @@ export const catalog = [
   tool(
     'alga_boards_list',
     'List ticket boards, optionally filtered by name search, one page at a time.',
-    'GET',
     '/boards',
-    'read',
     { search: str },
     [],
     true,
@@ -42,9 +34,7 @@ export const catalog = [
   tool(
     'alga_statuses_list',
     'List statuses, one page at a time. Use to browse or filter by board or status type.',
-    'GET',
     '/statuses',
-    'read',
     { board_id: id, status_type: str },
     [],
     true,
@@ -52,9 +42,7 @@ export const catalog = [
   tool(
     'alga_priorities_list',
     'List priorities, one page at a time. Use to browse or filter by priority name search.',
-    'GET',
     '/priorities',
-    'read',
     { search: str },
     [],
     true,
@@ -62,9 +50,7 @@ export const catalog = [
   tool(
     'alga_ticket_categories_list',
     'List ticket categories, one page at a time. Use to browse or filter by board or parent category.',
-    'GET',
     '/categories/ticket',
-    'read',
     { board_id: id, parent_category: id },
     [],
     true,
@@ -72,9 +58,7 @@ export const catalog = [
   tool(
     'alga_services_list',
     'List services, one page at a time. Use to browse or filter by name search or category.',
-    'GET',
     '/services',
-    'read',
     { search: str, category_id: id },
     [],
     true,
@@ -82,9 +66,7 @@ export const catalog = [
   tool(
     'alga_contracts_list',
     'List contracts, one page at a time. Use to browse or filter by client, status or search.',
-    'GET',
     '/contracts',
-    'read',
     { client_id: id, status: str, search: str },
     [],
     true,
@@ -92,9 +74,7 @@ export const catalog = [
   tool(
     'alga_search',
     "Search across record types at once. Use when you don't know the record type; pass the returned nextCursor as cursor to get more results.",
-    'GET',
     '/search',
-    'read',
     {
       query: { type: 'string', minLength: 1, maxLength: 200 },
       types: str,

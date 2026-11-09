@@ -102,15 +102,15 @@ try {
     fail(`path traversal id was not refused: ${textOf(traversal).slice(0, 200)}`);
 
   const write = await client.callTool({ name: 'alga_tickets_create', arguments: {} });
-  if (!write.isError || !/turned off/.test(textOf(write)))
-    fail('write tool was not refused by default');
+  if (!write.isError || !/Unknown tool/.test(textOf(write)))
+    fail('a former write tool was not refused as unknown');
 
   const unknown = await client.callTool({ name: 'alga_tickets_purge', arguments: {} });
   if (!unknown.isError) fail('unknown tool did not error');
 
   if (!process.exitCode)
     console.log(
-      `smoke-stdio: OK (${tools.length} read-only tools; bad URL, traversal id and write refused without a network call)`,
+      `smoke-stdio: OK (${tools.length} read-only tools; bad URL, traversal id and former write tool refused without a network call)`,
     );
 } catch (err) {
   fail(err instanceof Error ? err.message : String(err));

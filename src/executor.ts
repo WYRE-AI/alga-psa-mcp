@@ -16,19 +16,10 @@ function validateField(field: Field, value: unknown, name: string): void {
       `Invalid value for ${name}. Check its type, length and allowed values in the tool's input schema.`,
     );
   };
-  if (field.type === 'array') {
-    if (
-      !Array.isArray(value) ||
-      value.length < (field.minItems ?? 0) ||
-      value.length > (field.maxItems ?? Infinity)
-    )
-      return bad();
-    for (const item of value) if (field.items) validateField(field.items, item, name);
-  } else if (field.type === 'integer' || field.type === 'number') {
+  if (field.type === 'integer') {
     if (
       typeof value !== 'number' ||
-      !Number.isFinite(value) ||
-      (field.type === 'integer' && !Number.isInteger(value)) ||
+      !Number.isInteger(value) ||
       value < (field.minimum ?? -Infinity) ||
       value > (field.maximum ?? Infinity)
     )
@@ -82,15 +73,6 @@ export async function executeTool(
     throw new ToolArgumentError(
       'No Alga connection details found. Add the instance URL and API key in the connection settings.',
     );
-  if (
-    tool.name === 'alga_time_entries_create' &&
-    ['ticket', 'project_task'].includes(String(args.work_item_type)) &&
-    !args.work_item_id
-  ) {
-    throw new ToolArgumentError(
-      'work_item_id is required when work_item_type is ticket or project_task. Get the ID from alga_tickets_list or alga_projects_tasks_list and try again.',
-    );
-  }
   let route = tool.path;
   if (tool.name === 'alga_projects_tasks_list' && args.phase_id)
     route = '/projects/{project_id}/phases/{phase_id}/tasks';
@@ -101,66 +83,15 @@ export async function executeTool(
       ([key, value]) =>
         !pathKeys.includes(key) &&
         value !== undefined &&
-        !(
-          ['alga_projects_tasks_list', 'alga_projects_task_status_mappings_list'].includes(
-            tool.name,
-          ) && key === 'phase_id'
-        ),
+        !(tool.name === 'alga_projects_task_status_mappings_list' && key === 'phase_id'),
     ),
-  );
-  // Schemas only declare scalar query fields for GET tools (contract.test.ts checks this).
-  const query: Record<string, QueryValue> =
-    tool.method === 'GET'
-      ? {
-          ...(tool.paginated ? { page: 1, limit: 25 } : {}),
-          ...(values as Record<string, QueryValue>),
-        }
-      : {};
+  ) as Record<string, QueryValue>;
+  const query: Record<string, QueryValue> = {
+    ...(tool.paginated ? { page: 1, limit: 25 } : {}),
+    ...values,
+  };
   if (tool.name === 'alga_search' && query.limit === undefined) query.limit = 25;
-  let body: Record<string, unknown> | undefined =
-    tool.method === 'POST' || tool.method === 'PUT' ? values : undefined;
-  if (tool.name === 'alga_kb_articles_create') body = { ...values, status: 'draft' };
-  if (tool.name === 'alga_projects_tasks_update' && args.project_status_mapping_id) {
-    const task = (await requestAlga(
-      creds,
-      'GET',
-      `/projects/tasks/${pathSegment(args.task_id, 'task_id')}`,
-    )) as {
-      data?: { project_id?: unknown; phase_id?: unknown };
-    };
-    if (!task?.data?.project_id || !task.data.phase_id)
-      throw new ToolArgumentError(
-        "Alga didn't return the task's project and phase, so the new status can't be checked. Check the task ID with alga_projects_tasks_get and try again.",
-      );
-    await assertStatusBelongs(
-      creds,
-      String(task.data.project_id),
-      String(task.data.phase_id),
-      String(args.project_status_mapping_id),
-    );
-  }
-  if (tool.name === 'alga_projects_tasks_create' && args.project_status_mapping_id)
-    await assertStatusBelongs(
-      creds,
-      String(args.project_id),
-      String(args.phase_id),
-      String(args.project_status_mapping_id),
-    );
-  if (tool.name === 'alga_projects_tasks_create' && !body?.project_status_mapping_id) {
-    const mappings = await requestAlga(
-      creds,
-      'GET',
-      `/projects/${pathSegment(args.project_id, 'project_id')}/task-status-mappings`,
-    );
-    const scope = effectiveMappings(mappings, String(args.phase_id));
-    const mapping = scope.find((m) => !m.is_closed) ?? scope[0];
-    if (!mapping)
-      throw new ToolArgumentError(
-        'This phase has no task statuses set up. Add task statuses to the project in Alga, then try again.',
-      );
-    body = { ...body, project_status_mapping_id: mapping.project_status_mapping_id };
-  }
-  const result = await requestAlga(creds, tool.method, path, query, body);
+  const result = await requestAlga(creds, path, query);
   const output =
     tool.name === 'alga_projects_task_status_mappings_list' && args.phase_id
       ? { data: effectiveMappings(result, String(args.phase_id)) }
@@ -168,23 +99,7 @@ export async function executeTool(
   return renderResponse(output, [creds.apiKey, process.env.CONDUIT_S2S_SECRET ?? '']);
 }
 
-async function assertStatusBelongs(
-  creds: AlgaCredentials,
-  projectId: string,
-  phaseId: string,
-  statusId: string,
-): Promise<void> {
-  const mappings = await requestAlga(
-    creds,
-    'GET',
-    `/projects/${pathSegment(projectId, 'project_id')}/task-status-mappings`,
-  );
-  if (!effectiveMappings(mappings, phaseId).some((m) => m.project_status_mapping_id === statusId))
-    throw new ToolArgumentError(
-      "That status belongs to a different project or phase. Get a valid project_status_mapping_id from alga_projects_task_status_mappings_list for this task's project and phase, then try again.",
-    );
-}
-
+/** The phase's own status mappings, or the project's when the phase has none, in display order. */
 function effectiveMappings(value: unknown, phaseId: string): Record<string, unknown>[] {
   const data = (value as { data?: unknown })?.data;
   if (!Array.isArray(data))

@@ -1,34 +1,35 @@
 /**
- * Tool tiers. The container flags decide which tiers exist for the process
- * (read is always on; write and destructive need explicit opt-in), and
- * Conduit's X-Conduit-Tool-Tiers header can only narrow that set for one
- * request. The Conduit deployment leaves both flags off, so it serves read
- * tools only.
+ * Every tool in this server is a read (GET), so `read` is the only tier. The
+ * tier machinery matches the rest of the fleet so Conduit's
+ * X-Conduit-Tool-Tiers contract behaves the same here.
  */
-export type Tier = 'read' | 'write' | 'destructive';
+export type Tier = 'read';
 
-export const ALL_TIERS: readonly Tier[] = ['read', 'write', 'destructive'];
+export const ALL_TIERS: readonly Tier[] = ['read'];
 
 export const DEFAULT_TIERS: readonly Tier[] = ['read'];
 
 /** Header Conduit may send to narrow (never widen) the enabled tiers for one request. */
 export const TOOL_TIERS_HEADER = 'x-conduit-tool-tiers';
 
-export const flagEnabled = (value?: string): boolean => /^(true|1)$/i.test((value ?? '').trim());
-export const writesEnabled = (env: NodeJS.ProcessEnv = process.env) =>
-  flagEnabled(env.ALGA_ENABLE_WRITES);
-export const destructiveEnabled = (env: NodeJS.ProcessEnv = process.env) =>
-  flagEnabled(env.ALGA_ENABLE_DESTRUCTIVE);
-export const readOnlyMode = (env: NodeJS.ProcessEnv = process.env) =>
-  flagEnabled(env.READ_ONLY_MODE);
-
-/** Tiers this container serves, from ALGA_ENABLE_WRITES, ALGA_ENABLE_DESTRUCTIVE and READ_ONLY_MODE. */
+/**
+ * Tiers this container serves, from ALGA_TOOL_TIERS (the fleet's
+ * <VENDOR>_TOOL_TIERS contract). Unset or blank means DEFAULT_TIERS. An
+ * unknown value throws, so a typo or a request for write tools fails loudly
+ * at startup instead of being ignored.
+ */
 export function configuredTiers(env: NodeJS.ProcessEnv = process.env): ReadonlySet<Tier> {
-  const tiers = new Set<Tier>(DEFAULT_TIERS);
-  if (readOnlyMode(env) || !writesEnabled(env)) return tiers;
-  tiers.add('write');
-  if (destructiveEnabled(env)) tiers.add('destructive');
-  return tiers;
+  const tiers = new Set<Tier>();
+  for (const part of (env.ALGA_TOOL_TIERS ?? '').split(',')) {
+    const value = part.trim().toLowerCase();
+    if (!value) continue;
+    if (!(ALL_TIERS as readonly string[]).includes(value))
+      throw new Error(
+        `Invalid ALGA_TOOL_TIERS entry "${value.slice(0, 40)}". Allowed: ${ALL_TIERS.join(', ')}.`,
+      );
+    tiers.add(value as Tier);
+  }
+  return tiers.size ? tiers : new Set(DEFAULT_TIERS);
 }
 
 /**

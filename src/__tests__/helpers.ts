@@ -16,7 +16,6 @@ export type RouteCase = [
   path: string,
   args?: Record<string, unknown>,
   query?: Record<string, unknown>,
-  body?: Record<string, unknown>,
 ];
 /** Expected routes and wire payloads are authored independently of the inventory. */
 export function routeTests(cases: RouteCase[]) {
@@ -41,13 +40,10 @@ export function routeTests(cases: RouteCase[]) {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
-  for (const [name, method, path, args = {}, query = {}, body] of cases) {
+  for (const [name, method, path, args = {}, query = {}] of cases) {
     it(`${name} sends ${method} ${path}`, async () => {
       expect(getCredentials()?.apiKey).toBe(KEY);
-      const result = await dispatchToolCall(name, args, {
-        ALGA_ENABLE_WRITES: 'true',
-        ALGA_ENABLE_DESTRUCTIVE: 'true',
-      });
+      const result = await dispatchToolCall(name, args, {});
       expect(result.isError, JSON.stringify(result)).not.toBe(true);
       expect(fetch).toHaveBeenCalledTimes(1);
       const [rawUrl, init] = fetch.mock.calls[0];
@@ -64,7 +60,7 @@ export function routeTests(cases: RouteCase[]) {
         'x-api-key': KEY,
         'x-tenant-id': '12345678-1234-1234-1234-123456789abc',
       });
-      expect(init?.body ? JSON.parse(String(init.body)) : undefined).toEqual(body);
+      expect(init?.body).toBeUndefined();
       expect(JSON.parse(unwrap((result.content[0] as { text: string }).text))).toEqual({
         data: [{ id: 'result' }],
         pagination: { page: 2 },

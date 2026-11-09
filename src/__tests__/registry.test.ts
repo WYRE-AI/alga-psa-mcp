@@ -4,58 +4,20 @@ import { validateArgs } from '../executor.js';
 import { lookup } from 'node:dns/promises';
 import { fetch } from 'undici';
 afterEach(() => vi.restoreAllMocks());
-it('has exactly 72 unique tools: 42 read, 18 write, 12 destructive', () => {
-  expect(ALL_TOOLS).toHaveLength(72);
-  expect(new Set(ALL_TOOLS.map((t) => t.name)).size).toBe(72);
-  for (const [tier, count] of [
-    ['read', 42],
-    ['write', 18],
-    ['destructive', 12],
-  ] as const)
-    expect(ALL_TOOLS.filter((t) => t.tier === tier)).toHaveLength(count);
+it('has exactly 42 unique read tools, all listed by default', () => {
+  expect(ALL_TOOLS).toHaveLength(42);
+  expect(new Set(ALL_TOOLS.map((t) => t.name)).size).toBe(42);
   expect(selectTools({})).toHaveLength(42);
-});
-const W = { ALGA_ENABLE_WRITES: 'true' };
-it('lists 42 read tools by default, 60 with writes, 72 with destructive', () => {
   expect(listTools({})).toHaveLength(42);
-  expect(listTools(W)).toHaveLength(60);
-  expect(listTools({ ...W, ALGA_ENABLE_DESTRUCTIVE: 'true' })).toHaveLength(72);
 });
-it('does not enable destructive tools without writes', () => {
-  expect(listTools({ ALGA_ENABLE_DESTRUCTIVE: 'true' })).toHaveLength(42);
-});
-it.each(['true', 'TRUE', '1', ' true '])('enables writes and destructive with %s', (value) =>
-  expect(selectTools({ ALGA_ENABLE_WRITES: value, ALGA_ENABLE_DESTRUCTIVE: value })).toHaveLength(
-    72,
-  ),
-);
-it.each(['false', '0', 'yes', 'truex', '2', ''])(
-  'does not enable writes or destructive with %s',
-  (value) => {
-    expect(selectTools({ ALGA_ENABLE_WRITES: value })).toHaveLength(42);
-    expect(selectTools({ ...W, ALGA_ENABLE_DESTRUCTIVE: value })).toHaveLength(60);
-  },
-);
-it.each(['true', '1', 'TRUE'])('read-only wins with %s', (value) => {
-  const tools = selectTools({
-    READ_ONLY_MODE: value,
-    ...W,
-    ALGA_ENABLE_DESTRUCTIVE: 'true',
-  });
-  expect(tools).toHaveLength(42);
-  expect(tools.every((t) => t.tier === 'read')).toBe(true);
-});
-it('annotates every tool, prefixes destructive descriptions and keeps schemas closed', () => {
-  const listed = listTools({ ...W, ALGA_ENABLE_DESTRUCTIVE: 'true' });
+it('annotates every tool read-only and keeps schemas closed', () => {
+  const listed = listTools({});
   for (const tool of ALL_TOOLS) {
     const exposed = listed.find((t) => t.name === tool.name)!;
     expect(tool.name).toMatch(/^alga_[a-z0-9_]+$/);
     expect(tool.description.length).toBeLessThanOrEqual(300);
-    expect(exposed.annotations).toEqual({
-      readOnlyHint: tool.tier === 'read',
-      destructiveHint: tool.tier === 'destructive',
-    });
-    if (tool.tier === 'destructive') expect(tool.description).toMatch(/^⚠ DESTRUCTIVE: /);
+    expect(tool.description).not.toMatch(/DESTRUCTIVE/);
+    expect(exposed.annotations).toEqual({ readOnlyHint: true, destructiveHint: false });
     expect(tool.inputSchema.additionalProperties).toBe(false);
     expect(() => validateArgs(tool, { surprise: 'not allowed' })).toThrow();
     for (const [key, field] of Object.entries(tool.inputSchema.properties)) {
@@ -77,61 +39,23 @@ it('annotates every tool, prefixes destructive descriptions and keeps schemas cl
 });
 it('keeps the full JSON-RPC tools/list payload below 60KB', () => {
   expect(
-    Buffer.byteLength(
-      JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        result: { tools: listTools({ ...W, ALGA_ENABLE_DESTRUCTIVE: 'true' }) },
-      }),
-    ),
+    Buffer.byteLength(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { tools: listTools({}) } })),
   ).toBeLessThan(60_000);
 });
-it('never exposes prohibited routes or user mutations', () => {
+it('never exposes prohibited routes', () => {
   const prohibited =
     /\/(rmm|secrets|webhooks|workflows|tenants|auth|extensions|bulk)(\/|$)|\/(password|2fa|roles)(\/|$)|\/invoices\/[^/]+\/(payment|credit)(\/|$)/i;
   for (const tool of ALL_TOOLS) {
     expect(tool.path, tool.name).not.toMatch(prohibited);
-    expect(!(tool.path.startsWith('/users') && tool.method !== 'GET')).toBe(true);
-    expect(!(tool.path.startsWith('/invoices') && tool.method === 'DELETE')).toBe(true);
     expect(tool.path).toMatch(/^\/[a-z]/);
   }
 });
-it('rejects unknown, disabled and read-only writes by name', async () => {
-  for (const tool of ALL_TOOLS.filter((t) => t.tier !== 'read')) {
-    const result = await dispatchToolCall(
-      tool.name,
-      {},
-      { READ_ONLY_MODE: 'true', ...W, ALGA_ENABLE_DESTRUCTIVE: 'true' },
-    );
-    expect(result.isError).toBe(true);
-    expect(JSON.stringify(result)).toContain(
-      `${tool.name} is turned off because this container is in read-only mode. An admin can turn it off by setting READ_ONLY_MODE=false.`,
-    );
-  }
-  for (const tool of ALL_TOOLS.filter((t) => t.tier === 'destructive'))
-    expect((await dispatchToolCall(tool.name, {}, W)).isError).toBe(true);
-  expect((await dispatchToolCall('not_a_tool', {}, {})).isError).toBe(true);
-});
-it('does not allow callers to publish knowledge articles', async () => {
-  const tool = ALL_TOOLS.find((t) => t.name === 'alga_kb_articles_create')!;
-  expect(() => validateArgs(tool, { title: 'T', status: 'published' })).toThrow('Unknown');
-});
-it('refuses writes by name before any network call, with tier-specific text', async () => {
-  const write = await dispatchToolCall('alga_tickets_create', {}, {});
-  expect(write.isError).toBe(true);
-  expect((write.content[0] as { text: string }).text).toBe(
-    'Error: alga_tickets_create is turned off because creating and changing records in Alga is off in this container. An admin can turn it on with ALGA_ENABLE_WRITES=true.',
+it('refuses unknown tools by name before any network call', async () => {
+  const result = await dispatchToolCall('alga_tickets_purge', {}, {});
+  expect(result.isError).toBe(true);
+  expect((result.content[0] as { text: string }).text).toBe(
+    'Error: Unknown tool. Choose a tool from tools/list.',
   );
-  const destructive = await dispatchToolCall('alga_tickets_delete', { id: 't1' }, W);
-  expect((destructive.content[0] as { text: string }).text).toBe(
-    'Error: alga_tickets_delete is turned off because destructive actions in Alga are off in this container. An admin can turn them on with ALGA_ENABLE_WRITES=true and ALGA_ENABLE_DESTRUCTIVE=true.',
-  );
-  const alone = await dispatchToolCall(
-    'alga_tickets_delete',
-    { id: 't1' },
-    { ALGA_ENABLE_DESTRUCTIVE: 'true' },
-  );
-  expect(JSON.stringify(alone)).toContain('turned off');
   expect(fetch).not.toHaveBeenCalled();
   expect(lookup).not.toHaveBeenCalled();
 });

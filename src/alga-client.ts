@@ -33,11 +33,7 @@ export interface VendorErrorInfo {
   code?: string;
   requestId?: string;
 }
-export function apiFailure(
-  status: number,
-  method: string = 'GET',
-  info: VendorErrorInfo = {},
-): AlgaApiError {
+export function apiFailure(status: number, info: VendorErrorInfo = {}): AlgaApiError {
   const messages: Record<number, string> = {
     400: 'Alga rejected the request. Check the IDs and field values and try again',
     401: 'Alga rejected the API key. Check the API key in the connection settings, or create a new one in Alga under Profile → API Keys',
@@ -47,13 +43,7 @@ export function apiFailure(
     422: 'Alga rejected one or more field values. Check required fields and formats and try again',
     429: 'Alga is rate limiting requests. Wait a minute and try again.',
   };
-  const writes = ['POST', 'PUT'].includes(method.toUpperCase());
-  const message =
-    writes && status === 429
-      ? "Alga is rate limiting requests (HTTP 429). The change probably wasn't saved. Wait a minute, check in Alga, then try again."
-      : method.toUpperCase() !== 'GET' && status >= 500
-        ? `Alga did not confirm the change (HTTP ${status}). It may already have been saved; check in Alga before retrying.`
-        : `${messages[status] || (status >= 300 && status < 400 ? 'Alga redirected the request, which is not allowed. Check that the instance URL is the exact https:// address you use to sign in, with no path' : status >= 500 ? 'Alga is having a server problem. Try again shortly; if it keeps failing, contact Alga support.' : 'Alga API request failed. Check the connection settings and try again.')} (HTTP ${status}).`;
+  const message = `${messages[status] || (status >= 300 && status < 400 ? 'Alga redirected the request, which is not allowed. Check that the instance URL is the exact https:// address you use to sign in, with no path' : status >= 500 ? 'Alga is having a server problem. Try again shortly; if it keeps failing, contact Alga support.' : 'Alga API request failed. Check the connection settings and try again.')} (HTTP ${status}).`;
   const diagnostics =
     (info.code ? ` Alga error code: ${info.code}.` : '') +
     (info.requestId ? ` Request ID: ${info.requestId}.` : '');
@@ -88,7 +78,6 @@ export const MAX_UPSTREAM_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_ERROR_BODY_BYTES = 64 * 1024;
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
-export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 export type QueryValue = string | number | boolean | undefined;
 
 const invalidPath = () =>
@@ -132,12 +121,11 @@ export interface ClientOptions {
   fetch?: typeof undiciFetch;
   sleep?: (ms: number) => Promise<void>;
 }
+/** One read-only GET to Alga. This client cannot send a body or any other method. */
 export async function requestAlga(
   creds: AlgaCredentials,
-  method: Method,
   path: string,
   query: Record<string, QueryValue> = {},
-  body?: unknown,
   options: ClientOptions = {},
 ): Promise<unknown> {
   const tenantId = validateTenantId(creds.tenantId);
@@ -145,48 +133,37 @@ export async function requestAlga(
   const url = buildAlgaUrl(base, path, query);
   const headers: Record<string, string> = { 'x-api-key': creds.apiKey, accept: 'application/json' };
   if (tenantId) headers['x-tenant-id'] = tenantId;
-  if (body !== undefined) headers['content-type'] = 'application/json';
   const agent = createInstanceAgent();
   try {
     for (let attempt = 0; ; attempt++) {
       const response = await (options.fetch ?? undiciFetch)(url.toString(), {
-        method,
+        method: 'GET',
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
         redirect: 'manual',
         signal: AbortSignal.timeout(options.timeoutMs ?? 30_000),
         dispatcher: agent,
       });
-      const retry =
-        (response.status === 429 && (method === 'GET' || method === 'DELETE')) ||
-        (method !== 'POST' && [502, 503, 504].includes(response.status));
-      if (retry && attempt < 3) {
+      if ([429, 502, 503, 504].includes(response.status) && attempt < 3) {
         await response.body?.cancel();
         await (options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))))(
           retryAfterMs(response.headers.get('retry-after'), attempt),
         );
         continue;
       }
-      if (!response.ok) throw apiFailure(response.status, method, await errorInfo(response));
+      if (!response.ok) throw apiFailure(response.status, await errorInfo(response));
       if (response.status === 204) return { data: null };
-      const text = await readCapped(response, method, options.maxResponseBytes);
+      const text = await readCapped(response, options.maxResponseBytes);
       if (!text) return { data: null };
       try {
         return JSON.parse(text);
       } catch {
-        throw new AlgaApiError(
-          'Alga returned an invalid JSON response. Check in Alga before retrying a change; try reads again shortly.',
-        );
+        throw new AlgaApiError('Alga returned an invalid JSON response. Try again shortly.');
       }
     }
   } catch (error) {
     if (error instanceof AlgaApiError) throw error;
     // Vendor bodies and network exceptions can contain credentials; never forward them.
-    throw new AlgaApiError(
-      method === 'GET'
-        ? 'The request to Alga timed out or failed. Try again shortly.'
-        : 'The request to Alga timed out or failed. The change may already have been saved; check in Alga before retrying.',
-    );
+    throw new AlgaApiError('The request to Alga timed out or failed. Try again shortly.');
   } finally {
     await agent.close();
   }
@@ -208,7 +185,7 @@ async function errorInfo(
   }
   let code: unknown;
   try {
-    const text = await readCapped(response, 'GET', MAX_ERROR_BODY_BYTES);
+    const text = await readCapped(response, MAX_ERROR_BODY_BYTES);
     code = (JSON.parse(text) as { error?: { code?: unknown } } | null)?.error?.code;
   } catch {
     // An unreadable, oversized or non-JSON error body simply has no code.
@@ -218,12 +195,11 @@ async function errorInfo(
 
 async function readCapped(
   response: Awaited<ReturnType<typeof undiciFetch>>,
-  method: Method,
   cap = MAX_UPSTREAM_RESPONSE_BYTES,
 ): Promise<string> {
   const tooLarge = () =>
     new AlgaApiError(
-      `Alga sent a response larger than 4 MiB, so it was not read. Narrow the request with filters, fields or a smaller limit and try again.${method === 'GET' ? '' : ' The change may already have been saved; check in Alga before retrying.'}`,
+      'Alga sent a response larger than 4 MiB, so it was not read. Narrow the request with filters, fields or a smaller limit and try again.',
     );
   const declared = Number(response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > cap) {

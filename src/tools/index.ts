@@ -9,13 +9,13 @@ import { invoices } from './invoices.js';
 import { catalog } from './catalog.js';
 import { schedules } from './schedules.js';
 import { knowledge } from './knowledge.js';
-import { disabledReason, selectEnabled, toMcpTool } from './registry.js';
+import { selectEnabled, toMcpTool } from './registry.js';
 import { executeTool, ToolArgumentError } from '../executor.js';
 import { AlgaApiError } from '../alga-client.js';
 import { InstanceUrlError } from '../ssrf.js';
 import { wrapUntrusted } from '../untrusted.js';
 
-/** The single inventory of all 72 hand-written Alga tools. */
+/** The single inventory of all 42 hand-written Alga read tools. */
 export const ALL_TOOLS = [
   ...tickets,
   ...clients,
@@ -46,7 +46,6 @@ export async function dispatchToolCall(
 ): Promise<CallToolResult> {
   const tool = ALL_TOOLS.find((entry) => entry.name === name);
   if (!tool) return errorResult(UNKNOWN_TOOL);
-  if (!selectTools(env).includes(tool)) return errorResult(disabledReason(tool, env));
   // Narrowed out for this request by Conduit: indistinguishable from an unknown tool.
   if (!selectTools(env, tiersHeader).includes(tool)) return errorResult(UNKNOWN_TOOL);
   try {

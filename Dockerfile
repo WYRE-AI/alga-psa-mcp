@@ -23,16 +23,15 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # 0.0.0.0 is safe only because startup refuses to listen without a real
 # CONDUIT_S2S_SECRET, which the platform supplies at runtime and is never baked
 # into the image. AUTH_MODE=gateway never falls back to env credentials; Alga
-# credentials arrive per request on X-Alga-*. Write and destructive tools stay
-# off unless ALGA_ENABLE_WRITES / ALGA_ENABLE_DESTRUCTIVE are set at runtime.
+# credentials arrive per request on X-Alga-*. Every tool is a read (GET); the
+# image ships no write tools, and ALGA_TOOL_TIERS accepts only "read".
 ENV NODE_ENV=production \
     LOG_LEVEL=info \
     MCP_TRANSPORT=http \
     MCP_HTTP_PORT=8080 \
     MCP_HTTP_HOST=0.0.0.0 \
     AUTH_MODE=gateway \
-    ALGA_ENABLE_WRITES=false \
-    ALGA_ENABLE_DESTRUCTIVE=false
+    ALGA_TOOL_TIERS=read
 CMD ["node", "dist/http.js"]
 ARG VERSION="0.1.0"
 ARG COMMIT_SHA="unknown"

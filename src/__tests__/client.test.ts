@@ -49,7 +49,7 @@ afterEach(() => {
 it('sends API and tenant headers, manual redirects, a 30s timeout and safe dispatcher', async () => {
   vi.mocked(fetch).mockResolvedValue(mockResponse(200));
   const timeout = vi.spyOn(AbortSignal, 'timeout');
-  await requestAlga(creds, 'GET', '/clients', { page: 0, limit: 500, search: 'a&b' });
+  await requestAlga(creds, '/clients', { page: 0, limit: 500, search: 'a&b' });
   const [url, init] = vi.mocked(fetch).mock.calls[0];
   expect(String(url)).toBe('https://psa.example.com/api/v1/clients?page=1&limit=100&search=a%26b');
   expect(init).toMatchObject({
@@ -62,47 +62,42 @@ it('sends API and tenant headers, manual redirects, a 30s timeout and safe dispa
 it('omits optional tenant header and supports explicit timeout', async () => {
   vi.mocked(fetch).mockResolvedValue(mockResponse(200));
   const timeout = vi.spyOn(AbortSignal, 'timeout');
-  await requestAlga({ ...creds, tenantId: undefined }, 'GET', '/clients', {}, undefined, {
-    timeoutMs: 5,
-  });
+  await requestAlga(
+    { ...creds, tenantId: undefined },
+    '/clients',
+    {},
+    {
+      timeoutMs: 5,
+    },
+  );
   expect(vi.mocked(fetch).mock.calls[0][1]?.headers).not.toHaveProperty('x-tenant-id');
   expect(timeout).toHaveBeenCalledWith(5);
 });
-it.each([
-  ['GET', 429],
-  ['DELETE', 429],
-  ['GET', 502],
-  ['PUT', 503],
-  ['DELETE', 504],
-] as const)('retries %s HTTP %s and succeeds', async (method, status) => {
+it.each([429, 502, 503, 504])('retries HTTP %s and succeeds', async (status) => {
   vi.mocked(fetch)
     .mockResolvedValueOnce(mockResponse(status, { 'retry-after': '0' }))
     .mockResolvedValueOnce(mockResponse(200));
-  await requestAlga(creds, method, '/clients', {}, undefined, { sleep });
+  await requestAlga(creds, '/clients', {}, { sleep });
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(sleep).toHaveBeenCalledWith(0);
 });
-it.each(['POST', 'PUT'] as const)('never retries %s HTTP 429', async (method) => {
-  vi.mocked(fetch).mockResolvedValue(mockResponse(429, { 'retry-after': '0' }));
-  const error = await failure(requestAlga(creds, method, '/clients', {}, {}, { sleep }));
-  expect(error).toBeInstanceOf(AlgaRateLimitError);
-  expect(error.message).toBe(
-    "Alga is rate limiting requests (HTTP 429). The change probably wasn't saved. Wait a minute, check in Alga, then try again.",
-  );
+it.each([500, 408])('does not retry HTTP %s', async (status) => {
+  vi.mocked(fetch).mockResolvedValue(mockResponse(status));
+  await expect(requestAlga(creds, '/clients', {}, { sleep })).rejects.toThrow(`HTTP ${status}`);
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(sleep).not.toHaveBeenCalled();
 });
-it.each([502, 503, 504, 500, 408])('never retries POST HTTP %s', async (status) => {
-  vi.mocked(fetch).mockResolvedValue(mockResponse(status));
-  await expect(requestAlga(creds, 'POST', '/clients', {}, {}, { sleep })).rejects.toThrow(
-    `HTTP ${status}`,
-  );
-  expect(fetch).toHaveBeenCalledTimes(1);
-  expect(sleep).not.toHaveBeenCalled();
+it('only ever sends GET without a body', async () => {
+  vi.mocked(fetch).mockResolvedValue(mockResponse(200));
+  await requestAlga(creds, '/clients');
+  const init = vi.mocked(fetch).mock.calls[0][1];
+  expect(init?.method).toBe('GET');
+  expect(init?.body).toBeUndefined();
+  expect(init?.headers).not.toHaveProperty('content-type');
 });
 it.each([429, 502, 503, 504])('stops after three retries for HTTP %s', async (status) => {
   vi.mocked(fetch).mockImplementation(async () => mockResponse(status, { 'retry-after': '9000' }));
-  await expect(requestAlga(creds, 'GET', '/clients', {}, undefined, { sleep })).rejects.toThrow(
+  await expect(requestAlga(creds, '/clients', {}, { sleep })).rejects.toThrow(
     status === 429 ? AlgaRateLimitError : AlgaApiError,
   );
   expect(fetch).toHaveBeenCalledTimes(4);
@@ -124,7 +119,7 @@ it.each([301, 302, 303, 307, 308])(
     vi.mocked(fetch).mockResolvedValue(
       mockResponse(status, { location: 'http://169.254.169.254/' }),
     );
-    await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow('redirected the request');
+    await expect(requestAlga(creds, '/clients')).rejects.toThrow('redirected the request');
     expect(fetch).toHaveBeenCalledTimes(1);
   },
 );
@@ -133,7 +128,7 @@ it.each([400, 401, 403, 404, 409, 422, 429, 500])(
   async (status) => {
     vi.mocked(fetch).mockImplementation(async () => mockResponse(status, { 'retry-after': '0' }));
     try {
-      await requestAlga(creds, 'GET', '/clients', {}, undefined, { sleep });
+      await requestAlga(creds, '/clients', {}, { sleep });
       throw new Error('expected failure');
     } catch (error) {
       expect(error).toBeInstanceOf(
@@ -152,7 +147,7 @@ it.each([400, 401, 403, 404, 409, 422, 429, 500])(
 );
 it('sanitizes network and response-body failures', async () => {
   vi.mocked(fetch).mockRejectedValueOnce(new Error(`failed ${KEY}`));
-  await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow(
+  await expect(requestAlga(creds, '/clients')).rejects.toThrow(
     'The request to Alga timed out or failed. Try again shortly.',
   );
   vi.mocked(fetch).mockResolvedValue(
@@ -164,15 +159,15 @@ it('sanitizes network and response-body failures', async () => {
       }),
     ) as never,
   );
-  await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow(
+  await expect(requestAlga(creds, '/clients')).rejects.toThrow(
     'The request to Alga timed out or failed. Try again shortly.',
   );
 });
 it('rejects invalid JSON successes, handles empty successes', async () => {
   vi.mocked(fetch).mockResolvedValueOnce(new Response('oops') as never);
-  await expect(requestAlga(creds, 'GET', '/clients')).rejects.toThrow('invalid JSON');
+  await expect(requestAlga(creds, '/clients')).rejects.toThrow('invalid JSON');
   vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }) as never);
-  await expect(requestAlga(creds, 'DELETE', '/clients/c1')).resolves.toEqual({ data: null });
+  await expect(requestAlga(creds, '/clients/c1')).resolves.toEqual({ data: null });
 });
 it('passes page through (floored at 1) and clamps limit to the Alga max of 100', () => {
   expect([clampPage(undefined), clampPage(-1), clampPage(101), clampPage(3.8)]).toEqual([
@@ -256,9 +251,14 @@ it('rejects a content-length over the upstream cap without reading the body', as
     new Response(body, { status: 200, headers: { 'content-length': '999999' } }) as never,
   );
   const error = await failure(
-    requestAlga(creds, 'GET', '/clients', {}, undefined, {
-      maxResponseBytes: 1000,
-    }),
+    requestAlga(
+      creds,
+      '/clients',
+      {},
+      {
+        maxResponseBytes: 1000,
+      },
+    ),
   );
   expect(error).toBeInstanceOf(AlgaApiError);
   expect(error.message).toBe(GET_TOO_LARGE);
@@ -276,22 +276,9 @@ it('aborts a chunked stream part-way once it passes the cap', async () => {
     cancel,
   });
   vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }) as never);
-  const error = await failure(
-    requestAlga(
-      creds,
-      'POST',
-      '/clients',
-      {},
-      {},
-      {
-        maxResponseBytes: 1000,
-      },
-    ),
-  );
+  const error = await failure(requestAlga(creds, '/clients', {}, { maxResponseBytes: 1000 }));
   expect(error).toBeInstanceOf(AlgaApiError);
-  expect(error.message).toBe(
-    `${GET_TOO_LARGE} The change may already have been saved; check in Alga before retrying.`,
-  );
+  expect(error.message).toBe(GET_TOO_LARGE);
   expect(cancel).toHaveBeenCalled();
   expect(pulled).toBeLessThan(10);
 });
@@ -304,5 +291,5 @@ it('reads a streamed body under the cap, including split multi-byte characters',
     },
   });
   vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }) as never);
-  await expect(requestAlga(creds, 'GET', '/clients')).resolves.toEqual({ data: 'é💡' });
+  await expect(requestAlga(creds, '/clients')).resolves.toEqual({ data: 'é💡' });
 });
