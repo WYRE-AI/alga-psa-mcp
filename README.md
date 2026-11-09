@@ -1,10 +1,11 @@
 # @wyre-ai/alga-psa-mcp
 
 An Apache-2.0 MCP server for Alga PSA, maintained by WYRE AI. It exposes
-71 curated, hand-written tools over stdio or stateless Streamable HTTP: **41 read,
-18 write, and 12 destructive**. Only the 41 read tools are enabled by default.
-`ALGA_ENABLE_WRITES=true` adds the 18 write tools (59 in total), and
-`ALGA_ENABLE_DESTRUCTIVE=true` on top of that adds the 12 destructive tools (71).
+72 curated, hand-written tools over stdio or stateless Streamable HTTP: **42 read,
+18 write, and 12 destructive**. Only the 42 read tools are enabled by default, and
+every read tool is a plain `GET`. `ALGA_ENABLE_WRITES=true` adds the 18 write tools
+(60 in total), and `ALGA_ENABLE_DESTRUCTIVE=true` on top of that adds the 12
+destructive tools (72). The Conduit deployment leaves both flags off.
 
 The tools and schemas in this repository are hand-written. No generated API specification or Alga implementation code is included.
 
@@ -35,12 +36,13 @@ userinfo, query or fragment.
 only `gateway` or `env` is accepted; any other value refuses to start. Send these headers on every
 request to `/mcp`:
 
-| Header                | Required                       | Meaning                                                                                                                                                                                                                                                                                                      |
-| --------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `X-Alga-Instance-Url` | Yes                            | The https:// address you use to sign in to Alga, for example https://psa.example.com. A trailing / or /api/v1 is fine; leave off any other path. Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances on a public https:// URL are supported; instances on private networks are not. |
-| `X-Alga-Api-Key`      | Yes                            | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role.                                                                                                                            |
-| `X-Alga-Tenant-Id`    | No                             | Optional. Leave blank unless Alga support asks for it. A wrong value makes every request fail.                                                                                                                                                                                                               |
-| `X-Gateway-S2S`       | Yes, except insecure local dev | Timestamped gateway proof                                                                                                                                                                                                                                                                                    |
+| Header                 | Required                       | Meaning                                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `X-Alga-Instance-Url`  | Yes                            | The https:// address you use to sign in to Alga, for example https://psa.example.com. A trailing / or /api/v1 is fine; leave off any other path. Works for Nine Minds–hosted and self-hosted instances. Self-hosted instances on a public https:// URL are supported; instances on private networks are not. |
+| `X-Alga-Api-Key`       | Yes                            | API key for the Alga user this connection acts as. Create it in Alga under Profile → API Keys. The key gets that user's permissions, so use a dedicated user with a limited role.                                                                                                                            |
+| `X-Alga-Tenant-Id`     | No                             | Optional. Leave blank unless Alga support asks for it. A wrong value makes every request fail.                                                                                                                                                                                                               |
+| `X-Gateway-S2S`        | Yes, except insecure local dev | Timestamped gateway proof                                                                                                                                                                                                                                                                                    |
+| `X-Conduit-Tool-Tiers` | No                             | Comma-separated tiers (`read`, `write`, `destructive`) for this request. It only narrows the tiers the container serves and never widens them. Absent means no narrowing; present but empty means no tools at all.                                                                                           |
 
 Gateway mode **never falls back to environment credentials**, including the tenant
 ID. Missing required credential headers return HTTP 401 JSON `{error: ...}`;
@@ -55,7 +57,9 @@ Set a real `CONDUIT_S2S_SECRET` of at least 32 characters to start HTTP
 the configured secret. Proofs outside a five-minute window are refused. Deploy
 the vendor-specific derived S2S secret, not a shared gateway master secret.
 Empty or shorter secrets fail startup, and common placeholders such as `changeme`, `secret`
-and `replace-with-a-real-secret` are refused even in insecure dev mode.
+and `replace-with-a-real-secret` are refused even in insecure dev mode. Values that look like
+a placeholder, repeat a short pattern (`aaaa…`, `abcabc…`) or use fewer than 8 distinct
+characters are refused too. The secret is never echoed in these errors.
 
 `GET /health` is unauthenticated process liveness. It returns no credentials and
 never queries Alga. All `/mcp` requests require S2S before credential extraction
@@ -91,7 +95,8 @@ The write tools stay off unless `ALGA_ENABLE_WRITES=true`. It's set once per con
 | `CONDUIT_S2S_SECRET`          | Unset   | Required for HTTP, at least 32 characters; never sent to Alga                                                                                                                                                    |
 | `MCP_ALLOW_INSECURE_DEV`      | Off     | Exactly `1` permits HTTP without S2S only on loopback, and only with `NODE_ENV=development` (any other non-empty value other than `0` or `false` refuses to start without it); cannot bypass placeholder refusal |
 
-Disabled tools are absent from `tools/list` and rejected if called by name.
+Disabled tools are absent from `tools/list` and rejected if called by name. A tool
+removed for one request by `X-Conduit-Tool-Tiers` is refused as an unknown tool.
 Read tools carry `readOnlyHint: true, destructiveHint: false`. Write tools carry
 both hints false. Destructive tools carry `destructiveHint: true` and a warning
 prefix in their descriptions. These hints supplement server-side enforcement.
@@ -121,18 +126,27 @@ Requests time out after 30 seconds per attempt. For GET and DELETE, HTTP 429
 retries at most three times, honoring seconds or HTTP-date `Retry-After` values
 with a 60-second cap. POST and PUT never retry a 429, because the change may
 already have been saved. GET/PUT/DELETE retry 502/503/504; POST never retries
-5xx. Upstream responses are read as a stream and capped at 5 MiB; a larger one
+5xx. Upstream responses are read as a stream and capped at 4 MiB; a larger one
 is aborted with an error asking you to narrow the request. Other failures become
-concise tool errors; upstream error bodies and network exception details are not
-returned. Do not assume a timed-out write failed to reach Alga; inspect the record
-before repeating it.
+concise tool errors. From an Alga error we keep only its code (for example
+`NOT_FOUND`) and the `x-request-id` response header, and only when each is a plain
+token; Alga's error message, details and network exception text are not returned.
+Do not assume a timed-out write failed to reach Alga; inspect the record before
+repeating it.
+
+Every path parameter is checked again just before it goes into the URL (no empty
+value, `.`, `..`, `/`, `\`, encoded separators or dots, or control characters) and is
+percent-encoded. The built URL must land on exactly `{instance-origin}/api/v1{path}`.
+Query values are single scalars: Alga keeps one value per query key, so an array is
+refused rather than sent as repeated or `key[]` parameters.
 
 Tool input uses closed schemas, explicit write fields and bounded identifiers.
 HTTP bodies are capped at 256 KiB, including chunked bodies, and tool arguments
 at 10,000 elements. Responses are compact JSON retaining data and pagination;
 text above approximately 100 KiB ends with a truncation note. A truncated response
 is a text preview, so narrow the query before parsing it as JSON. Known API keys
-and S2S secrets are redacted from output; logs are restricted and redacted.
+and S2S secrets are redacted from output. Logs go to stderr and are redacted,
+including the per-request gateway API key.
 
 ## Untrusted content
 
@@ -143,18 +157,20 @@ preceded by a notice that it is untrusted data and not instructions. The nonce i
 random per response. The data inside is left unchanged (no HTML escaping), except
 that anything resembling an `untrusted-content` marker is defused with a `‹`
 so it cannot forge a closing tag. The truncation note, when present, stays inside
-the envelope. Error messages are always our own fixed text; Alga's error bodies are
-never forwarded.
+the envelope. Error messages are always our own fixed text plus, at most, Alga's
+error code and request ID tokens; Alga's error messages are never forwarded.
 
 ## Running locally
 
-Node 22 or newer is required; CI and Docker use Node 22.
+Node 22 or newer is required; CI runs Node 22 and 24, and Docker uses Node 22.
 
 ```sh
-npm ci
-npm run lint
+npm ci --ignore-scripts
+npm run lint              # ESLint + destructive-warning lint
+npm run typecheck
 npm run build
-npm test
+npm test                  # offline; DNS and fetch are mocked
+npm run smoke             # spawns dist/index.js over stdio; no network
 ```
 
 For stdio, set `ALGA_INSTANCE_URL`, `ALGA_API_KEY` and optional `ALGA_TENANT_ID`
@@ -194,7 +210,8 @@ docker run --rm -p 127.0.0.1:8080:8080 \
   -e CONDUIT_S2S_SECRET alga-psa-mcp:test
 ```
 
-The image uses `node:22-alpine`, runs as the non-root `alga` user, defaults to
+The image uses `node:22-alpine` pinned by digest, installs with `--ignore-scripts`,
+runs as the non-root `alga` user, defaults to
 `AUTH_MODE=gateway`, and exposes port 8080. It refuses to start without valid S2S
 configuration. Inject Alga credentials only via the per-request headers, and
 restrict network ingress to the trusted gateway. The healthcheck uses `/health`.
@@ -212,7 +229,9 @@ docker run --rm -i -e MCP_TRANSPORT=stdio -e AUTH_MODE=env \
 
 Paginated list tools accept `page` (default 1), `limit` (default 25), `sort`, `order`
 (`asc`/`desc`) and comma-separated `fields` projection, plus the filters in their
-schemas. Page and limit are bounded to 1–100; the client also clamps them.
+schemas. `page` is passed through as given (1 or more; Alga has no page maximum).
+`limit` is 1–100, Alga's maximum, and the client also clamps it. Each call makes one
+request; the server never fetches further pages on its own.
 `alga_search` uses the API's documented cursor pagination: pass the returned
 `nextCursor` as `cursor` with the same query/types/sort. It does not use page/order.
 Identifiers are strings, at most 128 characters, matching `^[A-Za-z0-9_\-:.]+$`;
@@ -222,9 +241,15 @@ as `id` except project phase lists, task lists, task creation and task status li
 
 Resource filters are optional. Filter behavior can vary by Alga version, so check results against your instance. Tests use mocked responses and don't contact a live Alga instance.
 
+Three Alga read endpoints are deliberately not separate tools.
+`GET /api/v1/tickets/statuses` and `/tickets/priorities` overlap `alga_statuses_list`
+and `alga_priorities_list`. `GET /api/v1/assets/{id}/summary` is left out because its
+route handler never authenticates the API key (it calls a session-based server action),
+so it is not expected to work with an API key.
+
 Project phase lists, task lists and task status lists are not paginated. `alga_projects_tasks_list` takes `project_id` and optional `phase_id`. If you leave out the status when creating a task, the server picks the first open status for that phase (or the first status, if none are open).
 
-### Read — 41 tools
+### Read — 42 tools
 
 | Tool                                      | Returns / key filters                                                                                                                                                                                                                                                     |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -255,6 +280,7 @@ Project phase lists, task lists and task status lists are not paginated. `alga_p
 | `alga_schedules_list`                     | List schedule entries, one page at a time. Use to browse or filter by user, work item or date range.                                                                                                                                                                      |
 | `alga_search`                             | Search across record types at once. Use when you don't know the record type; pass the returned nextCursor as cursor to get more results.                                                                                                                                  |
 | `alga_services_list`                      | List services, one page at a time. Use to browse or filter by name search or category.                                                                                                                                                                                    |
+| `alga_teams_list`                         | List teams of users, one page at a time. Use to browse or filter by team name, manager or whether a team has a manager.                                                                                                                                                   |
 | `alga_statuses_list`                      | List statuses, one page at a time. Use to browse or filter by board or status type.                                                                                                                                                                                       |
 | `alga_ticket_categories_list`             | List ticket categories, one page at a time. Use to browse or filter by board or parent category.                                                                                                                                                                          |
 | `alga_tickets_assets_list`                | List assets linked to a ticket, one page at a time.                                                                                                                                                                                                                       |
@@ -322,10 +348,17 @@ enable destructive tools only for connections intended to perform those actions.
 `src/tools/<domain>.ts` contains the hand-written tool definitions and closed JSON
 schemas. `src/tools/index.ts` holds the single tool inventory. Tests assert exact
 tier counts, annotations, excluded routes, tool-list size, wire requests, input
-limits, S2S behavior, SSRF protection and retry policy. No test contacts Alga.
-CI runs install, lint, build and tests on Node 22 plus a separate Docker build.
-The release workflow only supports manual dispatch; no push or PR triggers a
-release.
+limits, S2S behavior, SSRF protection, retry policy and the template security
+contract (`src/__tests__/contract.test.ts`). No test contacts Alga.
+CI (`ci.yml`) runs `npm ci --ignore-scripts`, lint, typecheck, build, the
+destructive-warning lint, a `process.env` credential-mutation guard, tests and the
+stdio smoke test on Node 22 and 24, plus a Docker build. `mcp-assert.yml` runs the
+fleet baseline plus `evals/`, and `gitleaks.yml` scans history.
+
+`release.yml` calls the pinned fleet release pipeline on pull requests and manual
+dispatch, which only runs its verify job: that pipeline publishes only on a push to
+`main`, and no push trigger is configured. Adding `push: branches: [main]` is the
+deliberate step for the first release.
 
 Apache-2.0; see [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 No Alga implementation code is included. Alga PSA is a trademark of Nine Minds.
