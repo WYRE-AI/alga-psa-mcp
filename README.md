@@ -47,7 +47,9 @@ ID. Missing required credential headers return HTTP 401 JSON `{error: ...}`;
 invalid or disallowed instance URLs return HTTP 400 JSON before MCP handling.
 A tenant ID, when supplied, must be a UUID. Empty tenant values are ignored.
 Credentials are isolated using AsyncLocalStorage. Each request gets its own MCP
-server and stateless transport; no credential-bearing sessions persist.
+server and stateless transport; no credential-bearing sessions persist. `/mcp`
+accepts only POST: after the S2S check, any other method (including a GET for a
+standalone SSE stream, or DELETE) gets HTTP 405 with `Allow: POST`.
 
 Set a real `CONDUIT_S2S_SECRET` of at least 32 characters to start HTTP
 (generate one with `openssl rand -hex 32`). The gateway proof has the form
@@ -80,6 +82,7 @@ instance URL and `ALGA_API_KEY` is set. The server does not automatically load
 | `MCP_TRANSPORT`     | `stdio` (Docker: `http`)                | Transport when using the HTTP entry point                                                                                                                                                                                                                                                                    |
 | `MCP_HTTP_PORT`     | `8080`                                  | HTTP listener port                                                                                                                                                                                                                                                                                           |
 | `MCP_HTTP_HOST`     | `0.0.0.0` with S2S                      | Bind host; insecure dev forces `127.0.0.1`                                                                                                                                                                                                                                                                   |
+| `MCP_ALLOWED_HOSTS` | Unset (insecure dev: loopback names)    | Optional comma-separated `Host` header allowlist for `/mcp` (with or without port); any other `Host` gets 403. Unset accepts any `Host`, except in insecure dev, where only `127.0.0.1`, `localhost` and `[::1]` are accepted, so a DNS-rebinding page cannot reach it                                       |
 | `LOG_LEVEL`         | `info`                                  | `debug`, `info`, `warn`, `error`; logs use stderr                                                                                                                                                                                                                                                            |
 
 ### Flags
@@ -140,7 +143,8 @@ list (for example `client_ids` on ticket search or `types` on `alga_search`), th
 tool takes one comma-separated string, which Alga splits.
 
 Tool input uses closed schemas and bounded identifiers.
-HTTP bodies are capped at 256 KiB, including chunked bodies, and tool arguments
+HTTP bodies are capped at 256 KiB, including chunked bodies; a body that passes the
+cap gets HTTP 413 and the connection is closed without reading the rest. Tool arguments are capped
 at 10,000 elements. Responses are compact JSON retaining data and pagination, capped
 at 100 KiB. A list page over the cap keeps its `pagination` and other top-level fields
 and drops rows from the end of `data`; it stays valid JSON and adds `truncated: true`,

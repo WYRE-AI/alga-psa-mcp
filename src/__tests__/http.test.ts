@@ -37,7 +37,7 @@ function send(
   path = '/mcp',
   method = 'POST',
   chunked = false,
-): Promise<{ status: number; text: string }> {
+): Promise<{ status: number; text: string; headers: Record<string, unknown> }> {
   return new Promise((resolve, reject) => {
     const req = request(
       {
@@ -59,7 +59,7 @@ function send(
         res.on('data', (chunk) => {
           text += chunk;
         });
-        res.on('end', () => resolve({ status: res.statusCode!, text }));
+        res.on('end', () => resolve({ status: res.statusCode!, text, headers: res.headers }));
       },
     );
     req.setTimeout(5000, () => req.destroy(new Error('HTTP fixture timed out')));
@@ -553,4 +553,91 @@ it('ignores an empty tenant header', async () => {
   const result = await send(port, { ...creds, 'x-gateway-s2s': proof(), 'x-alga-tenant-id': '' });
   expect(result.status).toBe(200);
   expect(vi.mocked(fetch).mock.calls[0][1]?.headers).not.toHaveProperty('x-tenant-id');
+});
+it.each([
+  ['GET', { accept: 'text/event-stream' }],
+  ['DELETE', {}],
+  ['PUT', {}],
+])(
+  'answers a signed %s with 405 and ends the response, opening no stream',
+  async (method, extra) => {
+    const { port } = await listen();
+    const headers = { ...creds, 'x-gateway-s2s': proof(), ...extra };
+    const result = await send(port, headers, '', '/mcp', method);
+    expect(result.status).toBe(405);
+    expect(result.headers.allow).toBe('POST');
+    expect(JSON.parse(result.text).error).toEqual({
+      code: -32000,
+      message: 'Method not allowed: this server is stateless; use POST.',
+    });
+    expect(lookup).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+it('still answers an unsigned GET with 401 before the method check', async () => {
+  const { port } = await listen();
+  const result = await send(port, { accept: 'text/event-stream' }, '', '/mcp', 'GET');
+  expect(result.status).toBe(401);
+});
+it('replies 413 and closes the connection while an endless chunked body is still arriving', async () => {
+  const { port } = await listen();
+  const outcome = await new Promise<{ status: number }>((resolve, reject) => {
+    let status = 0;
+    const req = request({
+      hostname: '127.0.0.1',
+      port,
+      path: '/mcp',
+      method: 'POST',
+      headers: {
+        ...creds,
+        'x-gateway-s2s': proof(),
+        'content-type': 'application/json',
+        'transfer-encoding': 'chunked',
+      },
+    });
+    // The client never ends the body, so only the server can finish this exchange.
+    const more = setInterval(() => {
+      if (!req.destroyed) req.write('x'.repeat(1024));
+    }, 20);
+    req.on('response', (res) => {
+      status = res.statusCode!;
+      res.resume();
+    });
+    req.on('close', () => {
+      clearInterval(more);
+      resolve({ status });
+    });
+    req.on('error', () => {});
+    req.setTimeout(3000, () => reject(new Error('the server kept reading the body')));
+    req.write('x'.repeat(MAX_REQUEST_BODY_BYTES + 1));
+  });
+  expect(outcome.status).toBe(413);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it('refuses a Host outside MCP_ALLOWED_HOSTS before S2S', async () => {
+  vi.stubEnv('MCP_ALLOWED_HOSTS', 'alga-psa-mcp.internal, 127.0.0.1');
+  const { port } = await listen();
+  const denied = await send(port, { host: 'evil.example' });
+  expect(denied.status).toBe(403);
+  expect(fetch).not.toHaveBeenCalled();
+  for (const host of ['alga-psa-mcp.internal', `127.0.0.1:${port}`]) {
+    const allowed = await send(port, { ...creds, 'x-gateway-s2s': proof(), host });
+    expect(allowed.status, host).toBe(200);
+  }
+});
+it('accepts any Host when MCP_ALLOWED_HOSTS is unset and S2S is enforced', async () => {
+  const { port } = await listen();
+  const result = await send(port, { ...creds, 'x-gateway-s2s': proof(), host: 'gw.example' });
+  expect(result.status).toBe(200);
+});
+it('limits insecure dev to loopback Host names, so DNS rebinding cannot reach it', async () => {
+  vi.stubEnv('NODE_ENV', 'development');
+  vi.stubEnv('CONDUIT_S2S_SECRET', '');
+  vi.stubEnv('MCP_ALLOW_INSECURE_DEV', '1');
+  const { port } = await listen();
+  const rebound = await send(port, { ...creds, host: `attacker.example:${port}` });
+  expect(rebound.status).toBe(403);
+  expect(fetch).not.toHaveBeenCalled();
+  for (const host of [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`])
+    expect((await send(port, { ...creds, host })).status, host).toBe(200);
 });

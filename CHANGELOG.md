@@ -66,6 +66,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- HTTP `/mcp` answers every method but POST with 405 and `Allow: POST` after the S2S
+  check. A signed GET used to open a standalone SSE stream that nothing closed, and
+  DELETE returned 200.
+- An HTTP body over the 256 KiB cap gets 413 and the connection is closed at once;
+  the rest of the body was read and discarded, so an endless chunked body held the
+  socket open.
+- `MCP_ALLOWED_HOSTS` (opt-in `Host` allowlist, as in the fleet templates). In insecure
+  dev it defaults to loopback names, so a DNS-rebinding page cannot reach a developer's
+  unauthenticated server.
 - `ALGA_ALLOW_PRIVATE_INSTANCE` is never honoured in gateway mode, and HTTP refuses to
   start with it in `AUTH_MODE=gateway`.
 - `alga_tickets_search` sends the keys Alga's search reads (`query`, `fields`,

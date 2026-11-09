@@ -149,15 +149,41 @@ function jsonRpcError(res: ServerResponse, status: number, code: number, message
   res.end(JSON.stringify({ jsonrpc: '2.0', error: { code, message }, id: null }));
 }
 
-/** The request body, or null once it passes the cap (the rest is drained, not kept). */
+/** The request body, or null as soon as it passes the cap; the rest is never read. */
 async function readBody(req: IncomingMessage): Promise<string | null> {
   const chunks: Buffer[] = [];
   let total = 0;
   for await (const chunk of req as AsyncIterable<Buffer>) {
     total += chunk.length;
-    if (total <= MAX_REQUEST_BODY_BYTES) chunks.push(chunk);
+    if (total > MAX_REQUEST_BODY_BYTES) return null;
+    chunks.push(chunk);
   }
-  return total > MAX_REQUEST_BODY_BYTES ? null : Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+/** MCP_ALLOWED_HOSTS as a set, or null when unset. Insecure dev defaults to loopback names. */
+function parseAllowedHosts(
+  raw: string | undefined,
+  insecureDev: boolean,
+): ReadonlySet<string> | null {
+  const entries = (raw ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  if (entries.length) return new Set(entries);
+  // Without S2S, a DNS-rebinding page could reach loopback; its Host is never a loopback name.
+  return insecureDev ? new Set(['127.0.0.1', 'localhost', '::1']) : null;
+}
+
+/** The Host header, with or without its port, must be in the allowlist when there is one. */
+function hostAllowed(req: IncomingMessage, allowed: ReadonlySet<string> | null): boolean {
+  if (!allowed) return true;
+  const host = (req.headers.host ?? '').trim().toLowerCase();
+  if (allowed.has(host)) return true;
+  // "[::1]:8080" -> "::1" (stripping ":\d+" from "::1" would leave "::"); "name:8080" -> "name".
+  const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(host);
+  const withoutPort = bracketed ? bracketed[1] : host.replace(/:\d+$/, '');
+  return withoutPort !== '' && allowed.has(withoutPort);
 }
 
 /** AUTH_MODE for HTTP: unset or empty is gateway; anything but gateway|env refuses to start. */
@@ -212,6 +238,7 @@ export async function startHttpServer(): Promise<HttpServer> {
   warnPrivateOverride();
   const port = parseInt(process.env.MCP_HTTP_PORT || '8080', 10);
   const host = resolveListenHost(s2sSecret);
+  const allowedHosts = parseAllowedHosts(process.env.MCP_ALLOWED_HOSTS, s2sSecret === '');
   setGatewayMode(isGatewayMode);
 
   const httpServer = createHttpServer((req, res) => {
@@ -240,6 +267,12 @@ export async function startHttpServer(): Promise<HttpServer> {
         return;
       }
 
+      if (!hostAllowed(req, allowedHosts)) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Forbidden: Host header is not in MCP_ALLOWED_HOSTS.' }));
+        return;
+      }
+
       // S2S guard runs first: a forged request must never reach credential
       // extraction or the MCP server/transport. Empty s2sSecret is only
       // reachable when MCP_ALLOW_INSECURE_DEV=1.
@@ -249,31 +282,45 @@ export async function startHttpServer(): Promise<HttpServer> {
         return;
       }
 
+      // Stateless: GET would open a standalone SSE stream and DELETE ends a session
+      // that never exists, so only POST reaches the transport.
+      if (req.method !== 'POST') {
+        res.setHeader('Allow', 'POST');
+        return jsonRpcError(
+          res,
+          405,
+          -32000,
+          'Method not allowed: this server is stateless; use POST.',
+        );
+      }
+
       // Body cap runs only after S2S passes so unauthenticated callers still get 401.
-      const tooLarge = `Request body exceeds ${MAX_REQUEST_BODY_BYTES} bytes`;
+      // An oversized body closes the connection, so the client cannot keep streaming it.
+      const tooLarge = () => {
+        res.setHeader('Connection', 'close');
+        jsonRpcError(res, 413, -32600, `Request body exceeds ${MAX_REQUEST_BODY_BYTES} bytes`);
+      };
       const contentLength = Number(headerValue(req.headers['content-length']));
       if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BODY_BYTES)
-        return jsonRpcError(res, 413, -32600, tooLarge);
+        return tooLarge();
 
       // The body is parsed here so a JSON-RPC batch never reaches the transport:
       // the 2025-06 protocol has no batching, and one POST must cost one tool call.
+      const text = await readBody(req);
+      if (text === null) return tooLarge();
       let parsedBody: unknown;
-      if (req.method === 'POST') {
-        const text = await readBody(req);
-        if (text === null) return jsonRpcError(res, 413, -32600, tooLarge);
-        try {
-          parsedBody = JSON.parse(text);
-        } catch {
-          return jsonRpcError(res, 400, -32700, 'Parse error: Invalid JSON');
-        }
-        if (Array.isArray(parsedBody))
-          return jsonRpcError(
-            res,
-            400,
-            -32600,
-            'Invalid Request: batches are not supported. Send one JSON-RPC message per request.',
-          );
+      try {
+        parsedBody = JSON.parse(text);
+      } catch {
+        return jsonRpcError(res, 400, -32700, 'Parse error: Invalid JSON');
       }
+      if (Array.isArray(parsedBody))
+        return jsonRpcError(
+          res,
+          400,
+          -32600,
+          'Invalid Request: batches are not supported. Send one JSON-RPC message per request.',
+        );
 
       const handle = async () => {
         // SECURITY-CRITICAL invariant: this transport MUST stay stateless
